@@ -27,32 +27,31 @@ def ExtractVolumes(fileLines,sections):
                 findVolume = re.search(r'Volume:\s+(\d+\.?\d*).+Average\s+Volume:',fileLines[line])
                 if findVolume: volumes.append(float(findVolume.group(1))) #A^3
     return volumes
-def ExtractPressures(fileLines,unit,sections):
+def ExtractPressures(fileName,fileLines,unit,sections):
     pressures = []
     for sec in sections:
         if (sec.lower() == 'init'):
             print('Warning: Pressure is not calculated by RASPA during initialization and equilibration cycles.')
             print('Extracting fixed external pressure.')
             for line in range(len(fileLines)):
-                findPressure = re.search(f'^External Pressure:\s+(\d+\.?\d*)',fileLines[line])
+                findPressure = re.search(f'.+_(\d+\.?\d*)\.data',fileName)
                 if findPressure: 
                     if unit == 'bar': pressures.append(float(findPressure.group(1))*1e-5); break
                     elif unit == 'atm': pressures.append(float(findPressure.group(1))*9.896e-6); break
                     else: pressures.append(float(findPressure.group(1))*1e-3); break #kPa
         elif (sec.lower() == 'prod'):
             for line in range(len(fileLines)):
-                findPressure = re.search(f'Average pressure:.+?(\d+\.\d*)\s+\[{unit}\]',fileLines[line])
-                if findPressure: pressures.append(float(findPressure.group(1)))
+                findPressure = re.search(f'Average Pressure:.+?(\d+\.\d*)\s+\[{unit}\]',fileLines[line])
+                if (findPressure and float(findPressure.group(1)) != 0.0): 
+                    pressures.append(float(findPressure.group(1)))
             if (len(pressures) == 0):
                 print('No molecular pressures were found. Extracting fixed external pressure.')
-                for line in range(len(fileLines)):
-                    findPressure = re.search(f'^External Pressure:\s+(\d+\.?\d*)',fileLines[line])
-                    if findPressure: 
-                        if unit == 'bar': pressures.append(float(findPressure.group(1))*1e-5); break
-                        elif unit == 'atm': pressures.append(float(findPressure.group(1))*9.896e-6); break
-                        else: pressures.append(float(findPressure.group(1))*1e-3); break #kPa
+                findPressure = re.search(f'.+_(\d+\.?\d*)\.data',fileName)
+                if unit == 'bar': pressures.append(float(findPressure.group(1))*1e-5)
+                elif unit == 'atm': pressures.append(float(findPressure.group(1))*9.896e-6)
+                else: pressures.append(float(findPressure.group(1))*1e-3) #kPa
     return pd.Series(pressures,index=range(len(pressures)))
-def ExtractTemperatures(fileLines,sections):
+def ExtractTemperatures(fileName,fileLines,sections):
     temperatures = []
     for sec in sections:
         if (sec.lower() == 'init'):
@@ -64,6 +63,9 @@ def ExtractTemperatures(fileLines,sections):
             for line in range(len(fileLines)):
                 findTemperature = re.search(f'Temperature:\s+(\d+\.?\d*).+Translational',fileLines[line])
                 if findTemperature: temperatures.append(float(findTemperature.group(1)))
+        if (len(temperatures) == 0):
+            print('No molecular temperatures were found. Extracting fixed external temperatures.')
+            temperatures.append(float(re.search('.+_(\d+\.?\d*)_\d+\.?\d*\.data',fileName).group(1)))
     return pd.Series(temperatures,index=range(len(temperatures)))
 def ExtractInternalEnergy(fileLines,sections):
     for sec in sections:
@@ -119,7 +121,7 @@ def ExtractDensitiesPerComponent(fileLines,component,sections):
                 if findDensity: densities.append(float(findDensity.group(1)))
         elif (sec.lower() == 'prod'):
             for line in range(len(fileLines)):
-                findDensity = re.search(f'Component.+\({component}\).+density:\s+(\d+\.?\d*)\s+\(average',fileLines[line])
+                findDensity = re.search(f'Component.+\({component}\).+density:\s+(\d+\.?\d*)\s+\(',fileLines[line])
                 if findDensity: densities.append(float(findDensity.group(1))) #kg/m^3
     return pd.Series(densities,index=range(len(densities)))
 def ExtractBoxLengths(fileLines,dimLetter,sections):
@@ -171,11 +173,11 @@ def ExtractWidomChemicalPotentialPerComponent(fileLines,component,sections):
             finally:
                 chemPots.append(np.nan)
                 return pd.Series(chemPots,index=[0])
-def CallExtractors(varsToExtract,fileLines,components,dimensions,unit,sections):
+def CallExtractors(varsToExtract,fileName,fileLines,components,dimensions,unit,sections):
     outData = {}
     if ('V' in varsToExtract): outData['V[A^3]'] = ExtractVolumes(fileLines,sections)
-    if ('T' in varsToExtract): outData['T[K]'] = ExtractTemperatures(fileLines,sections)
-    if ('P' in varsToExtract): outData[f'P[{unit}]'] = ExtractPressures(fileLines,unit,sections)
+    if ('T' in varsToExtract): outData['T[K]'] = ExtractTemperatures(fileName,fileLines,sections)
+    if ('P' in varsToExtract): outData[f'P[{unit}]'] = ExtractPressures(fileName,fileLines,unit,sections)
     if ('U' in varsToExtract): outData['U[K]'] = ExtractInternalEnergy(fileLines,sections)
     if ('Mu' in varsToExtract): 
         for comp in components:
@@ -226,9 +228,8 @@ def Flags(argv):
                 if (argv[j][0] == '-'): break
                 sections.append(argv[j])
     return path,outFile,units,components,dimensions,varsToExtract,printInputParams,createFigures,sections
-def PrintInputParameters(path,inFileName,outFile,components,dimensions,varsToExtract,units,createFigures,sections):
+def PrintInputParameters(path,listInFiles,outFile,components,dimensions,varsToExtract,units,createFigures,sections):
     print(f'\tInput path: {path}')
-    print(f'\tInput file: {inFileName}')
     print(f'\tFluid components: {components}')
     print(f'\tVariables to extract: {varsToExtract}')
     print(f'\tPressure unit: {units}')
@@ -236,7 +237,10 @@ def PrintInputParameters(path,inFileName,outFile,components,dimensions,varsToExt
     print(f'\tSections to analyze: {sections}')
     print(f'\tCreate figures: {createFigures}')
     print(f'\tCreate output file: {outFile[1]}')
-    if outFile[1]: print(f'\tOutput file: {outFile[0]}')
+    for i in range(len(listInFiles)):
+        print(f'\tInput file:')
+        print(f'\t\t{listInFiles[i]}')
+        if outFile[1]: print(f'\tOutput file: {i}_{outFile[0]}')
 def Help():
     print('\nDescription:')
     print('\tThis script extracts the output data generated by RASPA (from production cycles on) and prints it on the Terminal')
@@ -292,37 +296,55 @@ def CreateDataFrame(outData,components,dimensions):
     outData = pd.DataFrame(outData,index=range(len(outData[longestKey])))
     print(outData)
     return outData
-def CreateOutFile(outData,outFileName):
-    outPath = re.sub(r'(^.+)/.+\..+$',r'\1',outFileName)
-    if (outPath != outFileName): #If output file is not in a subdirectory.
-        os.makedirs(outPath, exist_ok=True)
-    outData.to_csv(outFileName,sep='\t',index=False,na_rep='NaN')
-def PlotVariables(outData,outFileName):
-    prefixFileName = re.sub(f'(^.+)\..+$',r'\1',outFileName)
+def CreateOutFile(outData,fileNumber,out):
+    if out[0]: #If output file is in a subdirectory.
+        os.makedirs(out[0]+'dataFiles/', exist_ok=True)
+    else: #If output file is not in a subdirectory.
+        os.makedirs('dataFiles/', exist_ok=True)
+    outData.to_csv(out[0]+'dataFiles/'+str(fileNumber)+'_'+out[1]+out[2],sep='\t',index=False,na_rep='NaN')
+def PlotVariables(outData,fileNumber,out):
+    if out[0]: #If output file is in a subdirectory.
+        os.makedirs(out[0]+'Figures/', exist_ok=True)
+    else: #If output file is not in a subdirectory.
+        os.makedirs('Figures/', exist_ok=True)
+    # prefixFileName = re.sub(f'(^.+)\..+$',r'\1',outFileName)
     outData.plot(style='.',subplots=True,grid=True,xlabel='Number of cycles')
     plt.tight_layout()
-    plt.savefig(prefixFileName+'.pdf')
+    plt.savefig(out[0]+'Figures/'+str(fileNumber)+'_'+out[1]+'.pdf')
+def ReadOutputFile(outFile):
+    out = re.search(r'(^.+/)(.+)(\..+$)',outFile[0])
+    if not out.group(3): return (out.group(1),out.group(2),'.dat')
+    else: return out.group(1,2,3)
 ##########################################################################################################
 if __name__ == '__main__':
     print('Author: Santiago A. Flores Roman')
     print('\nReading input parameters...')
     path,outFile,units,components,dimensions,varsToExtract,printInputParams,createFigures,sections = Flags(argv)
-    inFileName = os.listdir(path)[-1]
+    print('\nReading input files...')
+    listInFiles = os.listdir(path)
     if printInputParams == True: 
-        PrintInputParameters(path,inFileName,outFile,components,dimensions,varsToExtract,units,createFigures,sections)
-    print('\nExtracting data...')
-    with open(path+inFileName,'r') as fileContent: inFileLines = fileContent.readlines()
-    outData = CallExtractors(varsToExtract,inFileLines,components,dimensions,units,sections)
-    print('\nOrganizing data...')
-    outData = CreateDataFrame(outData,components,dimensions)
-    print(outData.describe())
-    if outFile[1] == True:
-        print(f'\nCreating output file: {outFile[0]} ...')
-        CreateOutFile(outData,outFile[0])
-    if createFigures: 
-        print('\nCreating figures...')
-        PlotVariables(outData,outFile[0])
-    print('\nNormal termination')
+        PrintInputParameters(path,listInFiles,outFile,components,dimensions,varsToExtract,units,createFigures,sections)
+    for i in range(len(listInFiles)):
+        print('\nExtracting data...')
+        with open(path+listInFiles[i],'r') as fileContent: inFileLines = fileContent.readlines()
+        outData = CallExtractors(varsToExtract,listInFiles[i],inFileLines,components,dimensions,units,sections)
+        print('\nOrganizing data...')
+        outData = CreateDataFrame(outData,components,dimensions)
+        print(outData.describe())
+        if outFile[1] == True:
+            out = ReadOutputFile(outFile)
+            print(f'\nCreating output file: {out[0]}dataFiles/{i}_{out[1]}{out[2]} ...')
+            CreateOutFile(outData,i,out)
+            if createFigures: 
+                print('\nCreating figures...')
+                PlotVariables(outData,i,out)
+        else:
+            if createFigures: 
+                out = ReadOutputFile(outFile)
+                print('\nCreating figures...')
+                PlotVariables(outData,out)
+        print(f'\nNormal termination for file {listInFiles[i]}')
+    print(f'\nNormal termination.')
     exit(0)
 
 # EOS
