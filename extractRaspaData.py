@@ -30,26 +30,17 @@ def ExtractVolumes(fileLines,sections):
 def ExtractPressures(fileName,fileLines,unit,sections):
     pressures = []
     for sec in sections:
-        if (sec.lower() == 'init'):
-            print('Warning: Pressure is not calculated by RASPA during initialization and equilibration cycles.')
-            print('Extracting fixed external pressure.')
+        if (sec.lower() == 'init'): print('Warning: Pressure is not calculated by RASPA during initialization and equilibration cycles.')
+        else:
             for line in range(len(fileLines)):
-                findPressure = re.search(f'.+_(\d+\.?\d*)\.data',fileName)
-                if findPressure: 
-                    if unit == 'bar': pressures.append(float(findPressure.group(1))*1e-5); break
-                    elif unit == 'atm': pressures.append(float(findPressure.group(1))*9.896e-6); break
-                    else: pressures.append(float(findPressure.group(1))*1e-3); break #kPa
-        elif (sec.lower() == 'prod'):
-            for line in range(len(fileLines)):
-                findPressure = re.search(f'Average Pressure:.+?(\d+\.\d*)\s+\[{unit}\]',fileLines[line])
-                if (findPressure and float(findPressure.group(1)) != 0.0): 
-                    pressures.append(float(findPressure.group(1)))
-            if (len(pressures) == 0):
-                print('No molecular pressures were found. Extracting fixed external pressure.')
-                findPressure = re.search(f'.+_(\d+\.?\d*)\.data',fileName)
-                if unit == 'bar': pressures.append(float(findPressure.group(1))*1e-5)
-                elif unit == 'atm': pressures.append(float(findPressure.group(1))*9.896e-6)
-                else: pressures.append(float(findPressure.group(1))*1e-3) #kPa
+                findPressure = re.search(f'Average pressure:.+?(\d+\.\d*)\s+\[{unit}\]',fileLines[line])
+                if (findPressure and float(findPressure.group(1)) != 0.0): pressures.append(float(findPressure.group(1)))
+    if (len(pressures) == 0):
+        print('No molecular pressures were found. Extracting fixed external pressure.')
+        findPressure = re.search(f'.+_(\d+\.?\d*e?\+?\d*)\.data',fileName)
+        if unit == 'bar': pressures.append(float(findPressure.group(1))*1e-5)
+        elif unit == 'atm': pressures.append(float(findPressure.group(1))*9.896e-6)
+        else: pressures.append(float(findPressure.group(1))*1e-3) #kPa
     return pd.Series(pressures,index=range(len(pressures)))
 def ExtractTemperatures(fileName,fileLines,sections):
     temperatures = []
@@ -65,7 +56,7 @@ def ExtractTemperatures(fileName,fileLines,sections):
                 if findTemperature: temperatures.append(float(findTemperature.group(1)))
         if (len(temperatures) == 0):
             print('No molecular temperatures were found. Extracting fixed external temperatures.')
-            temperatures.append(float(re.search('.+_(\d+\.?\d*)_\d+\.?\d*\.data',fileName).group(1)))
+            temperatures.append(float(re.search('.+_(\d+\.?\d*)_\d+\.?\d*e?\+?\d*\.data',fileName).group(1)))
     return pd.Series(temperatures,index=range(len(temperatures)))
 def ExtractInternalEnergy(fileLines,sections):
     for sec in sections:
@@ -154,7 +145,6 @@ def ExtractWidomChemicalPotentialPerComponent(fileLines,component,sections):
         if (sec.lower() == 'init'):
             chemPots = [np.nan]
             print('Warning: Chemical potential is not calculated by RASPA during initialization and equilibration cycles.')
-            return pd.Series(chemPots,index=[0])
         elif (sec.lower() == 'prod'):
             try:
                 chemPots = []
@@ -169,10 +159,14 @@ def ExtractWidomChemicalPotentialPerComponent(fileLines,component,sections):
                                 break
                         break
                 return pd.Series(chemPots,index=[0,1])
-            except: print('Error: Tried to read chemical potential, but simulation hasn\'t ended properly.')
+            except: 
+                print('Warning: Tried to read chemical potential, but simulation hasn\'t ended properly.')
+                print('Extracting current chemical potentials per cycle.')
+                for line in range(len(fileLines)):
+                    findChemPot = re.search(f'Component\s+\[{component}\].+average chemical potential:\s+(-?\d+\.?\d*)',fileLines[line]) #J/kb
+                    if findChemPot: chemPots.append(float(findChemPot.group(1)))
             finally:
-                chemPots.append(np.nan)
-                return pd.Series(chemPots,index=[0])
+                return pd.Series(chemPots,index=range(len(chemPots)))
 def CallExtractors(varsToExtract,fileName,fileLines,components,dimensions,unit,sections):
     outData = {}
     if ('V' in varsToExtract): outData['V[A^3]'] = ExtractVolumes(fileLines,sections)
@@ -313,7 +307,6 @@ def PlotVariables(outData,fileNumber,out):
     plt.savefig(out[0]+'Figures/'+str(fileNumber)+'_'+out[1]+'.pdf')
 def ReadOutputFile(outFile):
     out = re.search(r'(^.+/)(.+)(\..+$)',outFile[0])
-    print(outFile[0])
     if not out.group(3): return (out.group(1),out.group(2),'.dat')
     else: return out.group(1,2,3)
 ##########################################################################################################
