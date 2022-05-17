@@ -17,7 +17,7 @@ avogadro = const.Avogadro #mol^-1
 def ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section):
     dirs = os.listdir(dirsPath)
     if 'Output' in dirs:
-        outputRaspaFile = f'{dirsPath[:-1]}.dat'
+        outputRaspaFile = re.split('/',dirsPath)[-2]+'.dat'
         os.system(f'python3 extractRaspaData.py -i {dirsPath}/{inputSubPath} '
                   f'-o {outputRaspaPath}{outputRaspaFile} -c {species} '
                   f'-v {variables} -u {units} -d {dimensions} -f -s {section}')
@@ -34,36 +34,38 @@ def CreateDataFrame(outputRaspaPath,variables,units,dimensions,species,sort):
     for var in variables.split(' '):
         # Units handled in Raspa.
         if (var == 'Rho'):
-            var += ' [kg/m^3]'
+            var += '[kg/m^3]'
             deltaVar = 'delta'+var
-            for spcs in range(len(species.split(' '))):
-                spcVar =  var+f' {species[spcs]}'; reducedData[spcVar] = []
-                deltaVar += ' {species[scpcs]}'; reducedData[deltaVar] = []
+            spcs = species.split(' ')
+            for i in range(len(spcs)):
+                spcVar =  var+f' {spcs[i]}'; reducedData[spcVar] = []
+                deltaVar += f' {spcs[i]}'; reducedData[deltaVar] = []
         elif (var == 'N'): 
             deltaVar = 'delta'+var
-            for spcs in range(len(species.split(' '))):
-                spcVar = var+f' {species[spcs]}'; reducedData[var] = []
-                deltaVar += ' {species[scpcs]}'; reducedData[deltaVar] = []
+            spcs = species.split(' ')
+            for i in range(len(spcs)):
+                spcVar = var+f' {spcs[i]}'; reducedData[spcVar] = []
+                deltaVar += f' {spcs[i]}'; reducedData[deltaVar] = []
         elif (var == 'V'): 
-            var += f' [A^3]'; reducedData[var] = []
+            var += f'[A^3]'; reducedData[var] = []
             deltaVar = 'delta'+var; reducedData[deltaVar] = []
         elif (var == 'P'): 
-            var += f' [{units}]'; reducedData[var] = []
+            var += f'[{units}]'; reducedData[var] = []
             deltaVar = 'delta'+var; reducedData[deltaVar] = []
         elif (var == 'T'): 
-            var += f' [K]'; reducedData[var] = []
+            var += f'[K]'; reducedData[var] = []
             deltaVar = 'delta'+var; reducedData[deltaVar] = []
         elif (var == 'U'): 
-            var += f' [K]'; reducedData[var] = []
+            var += f'[K]'; reducedData[var] = []
             deltaVar = 'delta'+var; reducedData[deltaVar] = []
         elif (var == 'Mu'): 
-            var += f' [K]'; reducedData[var] = []
+            var += f'[K]'; reducedData[var] = []
             deltaVar = 'delta'+var; reducedData[deltaVar] = []
     #Create DataFrame
-    dirs = os.listdir(outputRaspaPath)
+    dirs = os.listdir(outputRaspaPath+'dataFiles/')
     for i in dirs:
         if i.endswith('.dat'):
-            df = pd.read_csv(outputRaspaPath+i,sep='\t')
+            df = pd.read_csv(outputRaspaPath+'dataFiles/'+i,sep='\t')
             for var in df.columns:
                 if (df[var].count() > 2):
                     reducedData[var].append(df[var][3:].mean())
@@ -75,12 +77,15 @@ def CreateDataFrame(outputRaspaPath,variables,units,dimensions,species,sort):
                     reducedData[var].append(df[var].values[0])
                     reducedData['delta'+var].append(0.0)
     reducedData = pd.DataFrame(reducedData)
-    reducedData.sort_values(sort) 
-    print(reducedData)
-    return reduceData
+    for key in reducedData.columns:
+        sortVal = re.search('^'+sort+'.+',key)
+        if sortVal: 
+            reducedData.sort_values(sortVal.group(),inplace=True,ignore_index=True)
+            break
+    return reducedData
 if __name__=='__main__':
     # Input parameters.
-    dirsPath = '../lochness-entries/'
+    dirsPath = '../lochness-entries/try_1/'
     inputSubPath = 'Output/System_0/'
     outputRaspaPath = '../'
 
@@ -92,40 +97,28 @@ if __name__=='__main__':
     sort = 'P'
 
     # Running code.
-    ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section)
-    # CreateDataFrame(outputRaspaPath,variables,units,dimensions,species,sort)
+    # ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section)
+    raspaData = CreateDataFrame(outputRaspaPath,variables,units,dimensions,species,sort)
+    print(raspaData)
 
-    # From now on, the lines below have to be edited by the user.
-    # # Read paper files.
-    # experData = {'rho[kg/m^3]':[],'Beta_T[GPa^-1]':[],'T[K]':[]}
-    # for i in range(len(reducedData['T[K]'])):
-        # # print(cp.PropsSI('isothermal_compressibility','P',101325,'T',reducedData['T[K]'][i],'water'))
-        # beta_T = cp.PropsSI('isothermal_compressibility','P',reducedData['P[Pa]'][i],'T',reducedData['T[K]'][i],'water')*1e9
-        # density = cp.PropsSI('D','P',reducedData['P[Pa]'][i],'T',reducedData['T[K]'][i],'water')
-        # experData['rho[kg/m^3]'].append(density)
-        # experData['Beta_T[GPa^-1]'].append(beta_T)
-        # experData['T[K]'].append(reducedData['T[K]'][i])
-    # experData = pd.DataFrame(experData)
-    # experData['K_T[GPa]'] = 1/experData['Beta_T[GPa^-1]']
-    # print(experData)
+    ###############################################################################################################
+    ############### From now on, the lines below have to be edited by the user. ###################################
+    # Edit raspaData.
+    pSat300K = 778e-3 #Saturation pressure at 300 K in kPa.
+    raspaData['Rho[g/cm^3]'] = raspaData['Rho[kg/m^3] TIP4P-2005']*1e-3
+    raspaData['deltaRho[g/cm^3]'] = raspaData['deltaRho[kg/m^3] TIP4P-2005']*1e-3
+    raspaData['p/p0'] = raspaData['P[kPa]']/pSat300K*0.036
+    print(raspaData)
 
-    # # Plot dataframes.
-    # fig,axs = plt.subplots(1)
-    # # reducedData.plot(x='x MIC',y='mixV[m^3]',ax=axs,style='.',legend=False)
-    # reducedData.plot(x='x MIC',y='mixV[m^3/mol]',ax=axs,yerr='deltamixV[m^3/mol]',capsize=3,fmt='.',legend=False)
-    # axs.plot(np.linspace(0,1,50),[0 for i in np.linspace(0,1,50)],'k--')
-    # axs.set_ylabel('$\Delta_{exss}V$ [$cm^3/mol$]')
-    # axs.set_xlabel('Mole fraction of MIC')
-    # axs.set_xticks([i for i in np.linspace(0,1,11)])
-    # fig.tight_layout()
-    # fig.savefig('ExssV.pdf')
+    # Read paper files.
+    paperData = pd.read_csv('../paperIsotherm-10A-300K.csv',skiprows=5,sep=',')[:-1]
+    print(paperData)
 
-    # fig,axs = plt.subplots(1)
-    # # reducedData.plot(x='x MIC',y='mixH[K]',ax=axs,style='.',legend=False)
-    # reducedData.plot(x='x MIC',y='mixH[K/mol]',ax=axs,yerr='deltamixH[K/mol]',capsize=3,fmt='.',legend=False)
-    # axs.plot(np.linspace(0,1,50),[0 for i in np.linspace(0,1,50)],'k--')
-    # axs.set_ylabel('$\Delta_{exss}H$ [kJ/mol]')
-    # axs.set_xlabel('Mole fraction of MIC')
-    # axs.set_xticks([i for i in np.linspace(0,1,11)])
-    # fig.tight_layout()
-    # fig.savefig('ExssH.pdf')
+    # Plot dataframes.
+    fig,axs = plt.subplots(1)
+    raspaData[8:].plot(x='p/p0',y='Rho[g/cm^3]',ax=axs,yerr='deltaRho[g/cm^3]',capsize=3,fmt='.',label='RASPA-GCMC')
+    paperData.plot(x='p/p0',y='rho[g/cm^3]',ax=axs,style='--',label='Guse, C.\'s',logx=True)
+    axs.set_ylabel('$\\rho$ [g/$cm^3$]'); axs.set_xlabel('$P/P_0$')
+    axs.legend()
+    fig.tight_layout()
+    fig.savefig('../Guse10A.pdf')

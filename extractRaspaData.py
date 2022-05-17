@@ -313,6 +313,7 @@ def PlotVariables(outData,fileNumber,out):
     plt.savefig(out[0]+'Figures/'+str(fileNumber)+'_'+out[1]+'.pdf')
 def ReadOutputFile(outFile):
     out = re.search(r'(^.+/)(.+)(\..+$)',outFile[0])
+    print(outFile[0])
     if not out.group(3): return (out.group(1),out.group(2),'.dat')
     else: return out.group(1,2,3)
 ##########################################################################################################
