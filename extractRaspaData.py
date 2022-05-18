@@ -102,6 +102,7 @@ def ExtractInternalEnergy(fileLines,sections):
                         currentEnergies = []
                     elif currentEnergy: currentEnergies.append(float(currentEnergy.group(1)))
             finally:
+                if (len(energies) == 0): energies.append(np.nan)
                 return pd.Series(energies,index=range(len(energies)))
 def ExtractDensitiesPerComponent(fileLines,component,sections):
     densities = []
@@ -142,31 +143,31 @@ def ExtractNumberOfMoleculesPerComponent(fileLines,component,sections):
     return nMolecules
 def ExtractWidomChemicalPotentialPerComponent(fileLines,component,sections):
     for sec in sections:
+        chemPots = []
         if (sec.lower() == 'init'):
-            chemPots = [np.nan]
             print('Warning: Chemical potential is not calculated by RASPA during initialization and equilibration cycles.')
         elif (sec.lower() == 'prod'):
-            try:
-                chemPots = []
-                for line in range(len(fileLines)-1,0,-1):
-                    findChemPot = re.search(f'Average Widom chemical potential:',fileLines[line])
-                    if findChemPot:
-                        for subline in range(line+8,len(fileLines),7):
-                            chemPot = re.search(f'\[{component}\]\s+Average.+?(-?\d+\.?\d*)\s+.+?(\d+\.?\d*)',fileLines[subline])
-                            if chemPot: 
-                                chemPots.append(float(chemPot.group(1))) #J/kb
-                                chemPots.append(float(chemPot.group(2))) #J/kb
-                                break
-                        break
-                return pd.Series(chemPots,index=[0,1])
-            except: 
+            chemPots = []
+            for line in range(len(fileLines)-1,0,-1):
+                findChemPot = re.search(f'Average Widom chemical potential:',fileLines[line])
+                if findChemPot:
+                    for subline in range(line+8,len(fileLines),7):
+                        chemPot = re.search(f'\[{component}\]\s+Average.+?(-?\d+\.?\d*)\s+.+?(\d+\.?\d*)',fileLines[subline])
+                        if chemPot: 
+                            chemPots.append(float(chemPot.group(1))) #J/kb
+                            chemPots.append(float(chemPot.group(2))) #J/kb
+                            break
+                    break
+            if (len(chemPots) == 0): 
                 print('Warning: Tried to read chemical potential, but simulation hasn\'t ended properly.')
                 print('Extracting current chemical potentials per cycle.')
                 for line in range(len(fileLines)):
                     findChemPot = re.search(f'Component\s+\[{component}\].+average chemical potential:\s+(-?\d+\.?\d*)',fileLines[line]) #J/kb
                     if findChemPot: chemPots.append(float(findChemPot.group(1)))
-            finally:
-                return pd.Series(chemPots,index=range(len(chemPots)))
+    if (len(chemPots) == 0): 
+        print('Warning: No chemical potential was found from RASPA.')
+        chemPots.append(np.nan)
+    return pd.Series(chemPots,index=range(len(chemPots)))
 def CallExtractors(varsToExtract,fileName,fileLines,components,dimensions,unit,sections):
     outData = {}
     if ('V' in varsToExtract): outData['V[A^3]'] = ExtractVolumes(fileLines,sections)
@@ -221,6 +222,12 @@ def Flags(argv):
             for j in range(i+1,len(argv)):
                 if (argv[j][0] == '-'): break
                 sections.append(argv[j])
+    if (not '-c') and (not '-C') in argv: 
+        print('Error: List of components was not given.\nPrinting help.')
+        Help(); sys.exit(1)
+    if (not '-v') and (not '-V') in argv: 
+        print('Error: List of variables was not given.\nPrinting help.')
+        Help(); sys.exit(1)
     return path,outFile,units,components,dimensions,varsToExtract,printInputParams,createFigures,sections
 def PrintInputParameters(path,listInFiles,outFile,components,dimensions,varsToExtract,units,createFigures,sections):
     print(f'\tInput path: {path}')
@@ -312,6 +319,8 @@ def ReadOutputFile(outFile):
 ##########################################################################################################
 if __name__ == '__main__':
     print('Author: Santiago A. Flores Roman')
+    joinargv = ' '.join(argv)
+    print(f'\nCommand line being executed:\n{joinargv}')
     print('\nReading input parameters...')
     path,outFile,units,components,dimensions,varsToExtract,printInputParams,createFigures,sections = Flags(argv)
     print('\nReading input files...')

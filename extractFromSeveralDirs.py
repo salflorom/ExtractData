@@ -59,8 +59,12 @@ def CreateDataFrame(outputRaspaPath,variables,units,dimensions,species,sort):
             var += f'[K]'; reducedData[var] = []
             deltaVar = 'delta'+var; reducedData[deltaVar] = []
         elif (var == 'Mu'): 
-            var += f'[K]'; reducedData[var] = []
-            deltaVar = 'delta'+var; reducedData[deltaVar] = []
+            var += '[K]'
+            deltaVar = 'delta'+var
+            spcs = species.split(' ')
+            for i in range(len(spcs)):
+                spcVar = var+f' {spcs[i]}'; reducedData[spcVar] = []
+                deltaVar += f' {spcs[i]}'; reducedData[deltaVar] = []
     #Create DataFrame
     dirs = os.listdir(outputRaspaPath+'dataFiles/')
     for i in dirs:
@@ -85,15 +89,15 @@ def CreateDataFrame(outputRaspaPath,variables,units,dimensions,species,sort):
     return reducedData
 if __name__=='__main__':
     # Input parameters.
-    dirsPath = '../lochness-entries/try_1/'
+    dirsPath = '../lochness-entries/'
     inputSubPath = 'Output/System_0/'
     outputRaspaPath = '../'
 
     species = 'TIP4P-2005'
-    variables = 'Rho N V P T' 
+    variables = 'Mu P T N V Rho' 
     units = 'kPa' #Available units: kPa, bar, atm.
     dimensions = 'x'
-    section = 'prod'
+    section = 'init prod'
     sort = 'P'
 
     # Running code.
@@ -104,21 +108,23 @@ if __name__=='__main__':
     ###############################################################################################################
     ############### From now on, the lines below have to be edited by the user. ###################################
     # Edit raspaData.
-    pSat300K = 778e-3 #Saturation pressure at 300 K in kPa.
-    raspaData['Rho[g/cm^3]'] = raspaData['Rho[kg/m^3] TIP4P-2005']*1e-3
-    raspaData['deltaRho[g/cm^3]'] = raspaData['deltaRho[kg/m^3] TIP4P-2005']*1e-3
-    raspaData['p/p0'] = raspaData['P[kPa]']/pSat300K*0.036
+    TIP4P2005MolarMass = 15.9994+2*1.008 #g/mol
+    raspaData['RhoCalc[kg/m^3]'] = (raspaData['N TIP4P-2005']/raspaData['V[A^3]'])*TIP4P2005MolarMass/avogadro*1e27 #kg/m^3
+    # pSat300K = 778e-3 #Saturation pressure at 300 K in kPa.
+    # raspaData['Rho[g/cm^3]'] = raspaData['Rho[kg/m^3] TIP4P-2005']*1e-3
+    # raspaData['deltaRho[g/cm^3]'] = raspaData['deltaRho[kg/m^3] TIP4P-2005']*1e-3
+    # raspaData['p/p0'] = raspaData['P[kPa]']/pSat300K*0.036
     print(raspaData)
 
-    # Read paper files.
-    paperData = pd.read_csv('../paperIsotherm-10A-300K.csv',skiprows=5,sep=',')[:-1]
-    print(paperData)
+    # # Read paper files.
+    # paperData = pd.read_csv('../paperIsotherm-10A-300K.csv',skiprows=5,sep=',')[:-1]
+    # print(paperData)
 
-    # Plot dataframes.
-    fig,axs = plt.subplots(1)
-    raspaData[8:].plot(x='p/p0',y='Rho[g/cm^3]',ax=axs,yerr='deltaRho[g/cm^3]',capsize=3,fmt='.',label='RASPA-GCMC')
-    paperData.plot(x='p/p0',y='rho[g/cm^3]',ax=axs,style='--',label='Guse, C.\'s',logx=True)
-    axs.set_ylabel('$\\rho$ [g/$cm^3$]'); axs.set_xlabel('$P/P_0$')
-    axs.legend()
-    fig.tight_layout()
-    fig.savefig('../Guse10A.pdf')
+    # # Plot dataframes.
+    # fig,axs = plt.subplots(1)
+    # raspaData[8:].plot(x='p/p0',y='Rho[g/cm^3]',ax=axs,yerr='deltaRho[g/cm^3]',capsize=3,fmt='.',label='RASPA-GCMC')
+    # paperData.plot(x='p/p0',y='rho[g/cm^3]',ax=axs,style='--',label='Guse, C.\'s',logx=True)
+    # axs.set_ylabel('$\\rho$ [g/$cm^3$]'); axs.set_xlabel('$P/P_0$')
+    # axs.legend()
+    # fig.tight_layout()
+    # fig.savefig('../Guse10A.pdf')
