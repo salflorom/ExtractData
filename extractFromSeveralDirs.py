@@ -28,7 +28,14 @@ def ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,vari
                       f'-o {outputRaspaPath}{outputRaspaFile} -c {species} '
                       f'-v {variables} -u {units} -d {dimensions} -f -s {section}')
 # Reads outputs from extractRaspaData.py and creates a Pandas DataFrame.
-def CreateDataFrame(outputRaspaPath,variables,units,dimensions,species,sort):
+def SearchDataFiles(dirsPath,outputRaspaPath):
+    dataFilesPath = outputRaspaPath+'dataFiles/'
+    dataFiles = ' '.join(os.listdir(dataFilesPath))
+    dataFileNames = os.listdir(dirsPath)
+    dataFilesPerName = {}
+    for name in dataFileNames: dataFilesPerName[name] = re.findall(f'\s\d+_{name}|^\d+_{name}',dataFiles)
+    return dataFilesPerName
+def CreateDataFrame(outputRaspaPath,dataFileName,inputSubPath,variables,units,dimensions,species,sort):
     # Create preDataFrame (dictionary with the column names).
     reducedData = {}
     for var in variables.split(' '):
@@ -68,7 +75,7 @@ def CreateDataFrame(outputRaspaPath,variables,units,dimensions,species,sort):
     #Create DataFrame
     dirs = os.listdir(outputRaspaPath+'dataFiles/')
     for i in dirs:
-        if i.endswith('.dat'):
+        if i.endswith(f'{dataFileName}.dat'):
             df = pd.read_csv(outputRaspaPath+'dataFiles/'+i,sep='\t')
             for var in df.columns:
                 if (df[var].count() > 2):
@@ -80,6 +87,8 @@ def CreateDataFrame(outputRaspaPath,variables,units,dimensions,species,sort):
                 else:
                     reducedData[var].append(df[var].values[0])
                     reducedData['delta'+var].append(0.0)
+    for var in reducedData.keys():
+        reducedData[var] = pd.Series(reducedData[var],index=range(len(reducedData[var])))
     reducedData = pd.DataFrame(reducedData)
     for key in reducedData.columns:
         sortVal = re.search('^'+sort+'.+',key)
@@ -89,7 +98,7 @@ def CreateDataFrame(outputRaspaPath,variables,units,dimensions,species,sort):
     return reducedData
 if __name__=='__main__':
     # Input parameters.
-    dirsPath = '../lochness-entries/'
+    dirsPath = '../lochness-entries/6_try/'
     inputSubPath = 'Output/System_0/'
     outputRaspaPath = '../'
 
@@ -102,19 +111,21 @@ if __name__=='__main__':
 
     # Running code.
     # ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section)
-    raspaData = CreateDataFrame(outputRaspaPath,variables,units,dimensions,species,sort)
-    print(raspaData)
+    dataFiles = SearchDataFiles(dirsPath,outputRaspaPath)
+    dataFrames = {}
+    for name in sorted(dataFiles.keys()): 
+        dataFrames[name] = CreateDataFrame(outputRaspaPath,name,inputSubPath,variables,units,dimensions,species,sort)
+        print('\n'+name)
+        print(dataFrames[name])
 
     ###############################################################################################################
     ############### From now on, the lines below have to be edited by the user. ###################################
     # Edit raspaData.
-    TIP4P2005MolarMass = 15.9994+2*1.008 #g/mol
-    raspaData['RhoCalc[kg/m^3]'] = (raspaData['N TIP4P-2005']/raspaData['V[A^3]'])*TIP4P2005MolarMass/avogadro*1e27 #kg/m^3
     # pSat300K = 778e-3 #Saturation pressure at 300 K in kPa.
     # raspaData['Rho[g/cm^3]'] = raspaData['Rho[kg/m^3] TIP4P-2005']*1e-3
     # raspaData['deltaRho[g/cm^3]'] = raspaData['deltaRho[kg/m^3] TIP4P-2005']*1e-3
     # raspaData['p/p0'] = raspaData['P[kPa]']/pSat300K*0.036
-    print(raspaData)
+    # print(raspaData)
 
     # # Read paper files.
     # paperData = pd.read_csv('../paperIsotherm-10A-300K.csv',skiprows=5,sep=',')[:-1]
