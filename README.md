@@ -9,11 +9,15 @@ Warning: This script will read only the last data file produced by RASPA in the 
 Instructions:<br>
 > python3 extractRaspaData.py [-[Flag] [Arguments]] [-[Flag] [Arguments]] ...<br>
 - Flags allowed:
-	- h or -H: Call for help.
-	- -s or -S: The types of cycles to analyze: Production cycles (prod) or initialization cycles (init). By default: prod
+	- -h or -H: Call for help.
+	- -t or -T: The types of cycles to analyze: Production cycles (prod) or initialization cycles (init). By default: prod
 		
 		Equilibration cycles (if added), are included in initialization cycles.
+
+	- -s or -S: Sort data frame according to a given value. By default, it's pressure (P).
 		
+		It can be sorted according to only one value, which must be one of the variables given after the flag -v (or -V).
+
 	- -f or -F: Plot the evolution of variables along the cycles.
 		
 		The plot file will be outputFile.pdf, where outputFile is indicated by the -o flag.
