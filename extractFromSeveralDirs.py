@@ -14,26 +14,28 @@ kb = const.Boltzmann #kb in J/K
 avogadro = const.Avogadro #mol^-1
 
 # Excecutes extractRaspaData.py
-def ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section):
+def ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,sort):
     dirs = os.listdir(dirsPath)
     if 'Output' in dirs:
         outputRaspaFile = re.split('/',dirsPath)[-2]+'.dat'
         os.system(f'python3 extractRaspaData.py -i {dirsPath}/{inputSubPath} '
                   f'-o {outputRaspaPath}{outputRaspaFile} -c {species} '
-                  f'-v {variables} -u {units} -d {dimensions} -f -s {section}')
+                  f'-v {variables} -u {units} -d {dimensions} -f -t {section} -s {sort}')
     else:
         for i in dirs:
             outputRaspaFile = f'{i}.dat'
             os.system(f'python3 extractRaspaData.py -i {dirsPath}{i}/{inputSubPath} '
                       f'-o {outputRaspaPath}{outputRaspaFile} -c {species} '
-                      f'-v {variables} -u {units} -d {dimensions} -f -s {section}')
+                      f'-v {variables} -u {units} -d {dimensions} -f -t {section} -s {sort}')
 # Reads outputs from extractRaspaData.py and creates a Pandas DataFrame.
 def SearchDataFiles(dirsPath,outputRaspaPath):
     dataFilesPath = outputRaspaPath+'dataFiles/'
     dataFiles = ' '.join(os.listdir(dataFilesPath))
     dataFileNames = os.listdir(dirsPath)
     dataFilesPerName = {}
-    for name in dataFileNames: dataFilesPerName[name] = re.findall(f'\s\d+_{name}|^\d+_{name}',dataFiles)
+    for name in dataFileNames: 
+        findDataFile = re.findall(f'\s\d+_{name}|^\d+_{name}',dataFiles)
+        if (len(findDataFile) != 0): dataFilesPerName[name] = findDataFile
     return dataFilesPerName
 def CreateDataFrame(outputRaspaPath,dataFileName,inputSubPath,variables,units,dimensions,species,sort):
     # Create preDataFrame (dictionary with the column names).
@@ -98,7 +100,7 @@ def CreateDataFrame(outputRaspaPath,dataFileName,inputSubPath,variables,units,di
     return reducedData
 if __name__=='__main__':
     # Input parameters.
-    dirsPath = '../lochness-entries/6_try/'
+    dirsPath = '../lochness-entries/'
     inputSubPath = 'Output/System_0/'
     outputRaspaPath = '../'
 
@@ -106,11 +108,11 @@ if __name__=='__main__':
     variables = 'Mu P T N V Rho' 
     units = 'kPa' #Available units: kPa, bar, atm.
     dimensions = 'x'
-    section = 'init prod'
+    section = 'prod'
     sort = 'P'
 
     # Running code.
-    # ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section)
+    ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,sort)
     dataFiles = SearchDataFiles(dirsPath,outputRaspaPath)
     dataFrames = {}
     for name in sorted(dataFiles.keys()): 

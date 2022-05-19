@@ -59,11 +59,11 @@ def ExtractTemperatures(fileName,fileLines,sections):
             temperatures.append(float(re.search('.+_(\d+\.?\d*)_\d+\.?\d*e?\+?\d*\.data',fileName).group(1)))
     return pd.Series(temperatures,index=range(len(temperatures)))
 def ExtractInternalEnergy(fileLines,sections):
+    energies,deltaEnergies = [],[]
     for sec in sections:
         if (sec.lower() == 'init'):
             print('Warning: Internal energy is not calculated by RASPA during initialization, equilibration and production cycles.')
             print('Conserved energy will be extracted. It is calculated after initialization cycles (from equilibration and production cycles).')
-            energies = []
             for line in range(len(fileLines)):
                 findEnergy = re.search(f'^Conserved\senergy:\s+(-?\d+\.?\d*)',fileLines[line])
                 if findEnergy: energies.append(float(findEnergy.group(1)))
@@ -78,18 +78,15 @@ def ExtractInternalEnergy(fileLines,sections):
                         energies.append(sum(currentEnergies))
                         currentEnergies = []
                     elif currentEnergy: currentEnergies.append(float(currentEnergy.group(1)))
-            return pd.Series(energies,index=range(len(energies)))
         elif (sec.lower() == 'prod'):
-            energies = []
-            try:
-                for line in range(len(fileLines)-1,0,-1):
-                    findEnergy = re.search(f'Total energy:',fileLines[line])
-                    if findEnergy:
-                        energy = re.search(f'Average\s+(-?\d+\.\d+).+?(\d+\.\d+)',fileLines[line+8])
-                        energies.append(float(energy.group(1))) #J/kb
-                        energies.append(float(energy.group(2))) #J/kb
-                        break
-            except: 
+            for line in range(len(fileLines)-1,0,-1):
+                findEnergy = re.search(f'Total energy:',fileLines[line])
+                if findEnergy:
+                    energy = re.search(f'Average\s+(-?\d+\.\d+).+?(\d+\.\d+)',fileLines[line+8])
+                    energies.append(float(energy.group(1))) #J/kb
+                    deltaEnergies.append(float(energy.group(2))) #J/kb
+                    break
+            if not findEnergy:
                 print('Error: Tried to read internal energy, but simulation hasn\'t ended properly.')
                 print('Extracting current energies per cycle.')
                 currentEnergies = []
@@ -101,9 +98,10 @@ def ExtractInternalEnergy(fileLines,sections):
                         energies.append(sum(currentEnergies))
                         currentEnergies = []
                     elif currentEnergy: currentEnergies.append(float(currentEnergy.group(1)))
-            finally:
-                if (len(energies) == 0): energies.append(np.nan)
-                return pd.Series(energies,index=range(len(energies)))
+    if (len(energies) == 0): 
+        print('Warning: No energy was found from RASPA.'); energies.append(np.nan)
+    if (len(deltaEnergies) == 0): deltaEnergies.append(np.nan)
+    return pd.Series(energies,index=range(len(energies))),pd.Series(deltaEnergies,index=range(len(deltaEnergies)))
 def ExtractDensitiesPerComponent(fileLines,component,sections):
     densities = []
     for sec in sections:
@@ -143,11 +141,10 @@ def ExtractNumberOfMoleculesPerComponent(fileLines,component,sections):
     return nMolecules
 def ExtractWidomChemicalPotentialPerComponent(fileLines,component,sections):
     for sec in sections:
-        chemPots = []
+        chemPots,deltaChemPots = [],[]
         if (sec.lower() == 'init'):
             print('Warning: Chemical potential is not calculated by RASPA during initialization and equilibration cycles.')
         elif (sec.lower() == 'prod'):
-            chemPots = []
             for line in range(len(fileLines)-1,0,-1):
                 findChemPot = re.search(f'Average Widom chemical potential:',fileLines[line])
                 if findChemPot:
@@ -155,19 +152,19 @@ def ExtractWidomChemicalPotentialPerComponent(fileLines,component,sections):
                         chemPot = re.search(f'\[{component}\]\s+Average.+?(-?\d+\.?\d*)\s+.+?(\d+\.?\d*)',fileLines[subline])
                         if chemPot: 
                             chemPots.append(float(chemPot.group(1))) #J/kb
-                            chemPots.append(float(chemPot.group(2))) #J/kb
+                            deltaChemPots.append(float(chemPot.group(2))) #J/kb
                             break
                     break
-            if (len(chemPots) == 0): 
+            if not findChemPot:
                 print('Warning: Tried to read chemical potential, but simulation hasn\'t ended properly.')
                 print('Extracting current chemical potentials per cycle.')
                 for line in range(len(fileLines)):
                     findChemPot = re.search(f'Component\s+\[{component}\].+average chemical potential:\s+(-?\d+\.?\d*)',fileLines[line]) #J/kb
                     if findChemPot: chemPots.append(float(findChemPot.group(1)))
     if (len(chemPots) == 0): 
-        print('Warning: No chemical potential was found from RASPA.')
-        chemPots.append(np.nan)
-    return pd.Series(chemPots,index=range(len(chemPots)))
+        print('Warning: No chemical potential was found from RASPA.'); chemPots.append(np.nan)
+    if (len(chemPots) == 0): deltaChemPots.append(np.nan)
+    return pd.Series(chemPots,index=range(len(chemPots))),pd.Series(deltaChemPots,index=range(len(deltaChemPots)))
 def CallExtractors(varsToExtract,fileName,fileLines,components,dimensions,unit,sections):
     outData = {}
     if ('V' in varsToExtract): outData['V[A^3]'] = ExtractVolumes(fileLines,sections)
@@ -176,7 +173,9 @@ def CallExtractors(varsToExtract,fileName,fileLines,components,dimensions,unit,s
     if ('U' in varsToExtract): outData['U[K]'] = ExtractInternalEnergy(fileLines,sections)
     if ('Mu' in varsToExtract): 
         for comp in components:
-            outData['Mu[K]'+f' {comp}'] = ExtractWidomChemicalPotentialPerComponent(fileLines,comp,sections)
+            chemPots,deltaChemPots = ExtractWidomChemicalPotentialPerComponent(fileLines,comp,sections)
+            outData['Mu[K]'+f' {comp}'] = chemPots
+            if (len(deltaChemPots) != 0): outData['deltaMu[K]'+f' {comp}'] = deltaChemPots
     if ('Rho' in varsToExtract): 
         for comp in components:
             outData['Rho[kg/m^3]'+f' {comp}'] = ExtractDensitiesPerComponent(fileLines,comp,sections)
@@ -192,10 +191,11 @@ def Flags(argv):
     units = 'kPa'
     dimensions = ['x','y','z']
     components = []
-    varsToExtract = []
+    varsToExtract = ['Rho','P']
     outFile = ('outData.dat',False)
     printInputParams = createFigures = False
     sections = ['prod']
+    sort = 'P'
 
     for i in range(len(argv)):
         if (argv[i] == '-h' or argv[i] == '-H'): Help()
@@ -203,6 +203,7 @@ def Flags(argv):
         if (argv[i] == '-f' or argv[i] == '-F'): createFigures = True
         elif (argv[i] == '-i' or argv[i] == '-I'): path = argv[i+1]
         elif (argv[i] == '-u' or argv[i] == '-U'): units = argv[i+1]
+        elif (argv[i] == '-s' or argv[i] == '-S'): sort = argv[i+1]
         elif (argv[i] == '-o' or argv[i] == '-O'): outFile = (argv[i+1],True)
         elif (argv[i] == '-d' or argv[i] == '-D'): 
             dimensions = []
@@ -214,10 +215,11 @@ def Flags(argv):
                 if (argv[j][0] == '-'): break
                 components.append(argv[j])
         elif (argv[i] == '-v' or argv[i] == '-V'): 
+            varsToExtract = []
             for j in range(i+1,len(argv)):
                 if (argv[j][0] == '-'): break
                 varsToExtract.append(argv[j])
-        elif (argv[i] == '-s' or argv[i] == '-S'): 
+        elif (argv[i] == '-t' or argv[i] == '-T'): 
             sections = []
             for j in range(i+1,len(argv)):
                 if (argv[j][0] == '-'): break
@@ -225,14 +227,12 @@ def Flags(argv):
     if (not '-c') and (not '-C') in argv: 
         print('Error: List of components was not given.\nPrinting help.')
         Help(); sys.exit(1)
-    if (not '-v') and (not '-V') in argv: 
-        print('Error: List of variables was not given.\nPrinting help.')
-        Help(); sys.exit(1)
-    return path,outFile,units,components,dimensions,varsToExtract,printInputParams,createFigures,sections
-def PrintInputParameters(path,listInFiles,outFile,components,dimensions,varsToExtract,units,createFigures,sections):
+    return path,outFile,units,components,dimensions,varsToExtract,printInputParams,createFigures,sections,sort
+def PrintInputParameters(path,listInFiles,outFile,components,dimensions,varsToExtract,units,createFigures,sections,sort):
     print(f'\tInput path: {path}')
     print(f'\tFluid components: {components}')
     print(f'\tVariables to extract: {varsToExtract}')
+    print(f'\tSort variables according to: {sort}')
     print(f'\tPressure unit: {units}')
     print(f'\tBox dimensions: {dimensions}')
     print(f'\tSections to analyze: {sections}')
@@ -253,8 +253,10 @@ def Help():
     print('\tpython3 extractRaspaData.py [-[Flag] [Arguments]] [-[Flag] [Arguments]] ...')
     print('\tFlags allowed:')
     print('\t\t-h or -H: Call for help.')
-    print('\t\t-s or -S: The types of cycles to analyze: Production cycles (prod) or initialization cycles (init). By default: prod')
+    print('\t\t-t or -T: The types of cycles to analyze: Production cycles (prod) or initialization cycles (init). By default: prod')
     print('\t\t\tEquilibration cycles (if added), are included in initialization cycles.')
+    print('\t\t-s or -S: Sort data frame according to a given value. By default, it\'s pressure (P).')
+    print('\t\t\tIt can be sorted according to only one value, which must be one of the variables given after the flag -v (or -V).')
     print('\t\t-f or -F: Plot the evolution of variables along the cycles.')
     print('\t\t\tThe plot file will be outputFile.pdf, where outputFile is indicated by the -o flag.')
     print('\t\t-p or -P: Print input parameters.')
@@ -264,7 +266,7 @@ def Help():
     print('\t\t-u or -U: Indicate the units for the pressure (kPa, atm or bar). By default: kPa')
     print('\t\t-c or -C: List of components involved in the simulation (fluid mixture). You must specify the species, even if it was only one')
     print('\t\t-d or -D: List of dimensions to extract the box-lengths. By deafault, the three dimensions.')
-    print('\t\t-v or -V: Indicate the list of variables that will be extracted from the RASPA\'s data files (per cycle). By default: Rho')
+    print('\t\t-v or -V: Indicate the list of variables that will be extracted from the RASPA\'s data files (per cycle). By default: Rho and P.')
     print('\tVariables allowed:')
     print('\t\tV: Volume in A^3.')
     print('\t\tT: Temperature in K.')
@@ -289,13 +291,16 @@ def Help():
     print('\tThe extracted data would be saved in the file excessProps.dat')
     print('\tpython3 extractRaspaData.py -I Outputs/System_1/ -o ./excessProps.dat -s prod -C methane benzene -v U V P L -U atm -d x -p')
     exit(1)
-def CreateDataFrame(outData,components,dimensions):
+def CreateDataFrame(outData,components,dimensions,sort):
     keys = list(outData.keys())
     longestKey = keys[0]
     for i in range(1,len(keys)):
         if (len(outData[keys[i]]) > len(outData[keys[i-1]])): longestKey = keys[i]
     outData = pd.DataFrame(outData,index=range(len(outData[longestKey])))
-    print(outData)
+    for key in outData.columns:
+        findSortKey = re.search(f'^{sort}\[.+',key)
+        if findSortKey: 
+            outData.sort_values(findSortKey.group(),ignore_index=True,inplace=True); break
     return outData
 def CreateOutFile(outData,fileNumber,out):
     if out[0]: #If output file is in a subdirectory.
@@ -322,17 +327,18 @@ if __name__ == '__main__':
     joinargv = ' '.join(argv)
     print(f'\nCommand line being executed:\n{joinargv}')
     print('\nReading input parameters...')
-    path,outFile,units,components,dimensions,varsToExtract,printInputParams,createFigures,sections = Flags(argv)
+    path,outFile,units,components,dimensions,varsToExtract,printInputParams,createFigures,sections,sort = Flags(argv)
     print('\nReading input files...')
     listInFiles = os.listdir(path)
     if printInputParams == True: 
-        PrintInputParameters(path,listInFiles,outFile,components,dimensions,varsToExtract,units,createFigures,sections)
+        PrintInputParameters(path,listInFiles,outFile,components,dimensions,varsToExtract,units,createFigures,sections,sort)
     for i in range(len(listInFiles)):
         print('\nExtracting data...')
         with open(path+listInFiles[i],'r') as fileContent: inFileLines = fileContent.readlines()
         outData = CallExtractors(varsToExtract,listInFiles[i],inFileLines,components,dimensions,units,sections)
         print('\nOrganizing data...')
-        outData = CreateDataFrame(outData,components,dimensions)
+        outData = CreateDataFrame(outData,components,dimensions,sort)
+        print(outData)
         print(outData.describe())
         if outFile[1] == True:
             out = ReadOutputFile(outFile)
