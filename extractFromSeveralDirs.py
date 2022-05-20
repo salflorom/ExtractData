@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 
 kb = const.Boltzmann #kb in J/K
 avogadro = const.Avogadro #mol^-1
+planck = const.Planck #J*s
 
 # Excecutes extractRaspaData.py
 def ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,sort):
@@ -37,7 +38,7 @@ def SearchDataFiles(dirsPath,outputRaspaPath):
         findDataFile = re.findall(f'\s\d+_{name}|^\d+_{name}',dataFiles)
         if (len(findDataFile) != 0): dataFilesPerName[name] = findDataFile
     return dataFilesPerName
-def CreateDataFrame(outputRaspaPath,dataFileName,inputSubPath,variables,units,dimensions,species,sort):
+def CreateDataFrame(outputRaspaPath,dataFileName,inputSubPath,variables,units,dimensions,species,sort,countFrom):
     # Create preDataFrame (dictionary with the column names).
     reducedData = {}
     for var in variables.split(' '):
@@ -95,11 +96,10 @@ def CreateDataFrame(outputRaspaPath,dataFileName,inputSubPath,variables,units,di
             df = pd.read_csv(outputRaspaPath+'dataFiles/'+i,sep='\t')
             for var in df.columns:
                 if (df[var].count() > 1):
-                    reducedData[var].append(df[var][3:].mean())
-                    reducedData['delta'+var].append(df[var][3:].std())
+                    reducedData[var].append(df[var][countFrom:].mean())
+                    reducedData['delta'+var].append(df[var][countFrom:].std())
                 elif (df[var].count() == 1):
                     reducedData[var].append(df[var].values[0])
-                    # reducedData['delta'+var].append(df[var].values[1])
                 else:
                     reducedData[var].append(df[var].values[0])
                     reducedData['delta'+var].append(0.0)
@@ -120,11 +120,11 @@ def JoinDataFrames(dataFrames,sort):
         findSortValue = re.search(f'^{sort}\[.+',key)
         if findSortValue: concatDataFrame.sort_values(findSortValue.group(),ignore_index=True,inplace=True)
     return concatDataFrame
-def ExtractFromRaspa(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,sort,joinDataFrames):
+def ExtractFromRaspa(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,sort,joinDataFrames,countFrom):
     dataFiles = SearchDataFiles(dirsPath,outputRaspaPath)
     dataFrames = {}
     for name in sorted(dataFiles.keys()): 
-        dataFrames[name] = CreateDataFrame(outputRaspaPath,name,inputSubPath,variables,units,dimensions,species,sort)
+        dataFrames[name] = CreateDataFrame(outputRaspaPath,name,inputSubPath,variables,units,dimensions,species,sort,countFrom)
         print('\n'+name)
         print(dataFrames[name])
     if joinDataFrames: 
@@ -133,6 +133,7 @@ def ExtractFromRaspa(dirsPath,inputSubPath,outputRaspaPath,species,variables,uni
         return dataFrame
     return dataFrames
 ####################################################################################################################
+####################################################################################################################
 if __name__=='__main__':
     # Input parameters.
     dirsPath = '../lochness-entries/'
@@ -140,27 +141,37 @@ if __name__=='__main__':
     outputRaspaPath = '../'
 
     species = 'TIP4P-2005'
-    variables = 'IdMu ExMu Mu P T N V' 
+    variables = 'ExMu P T N V' 
     units = 'kPa' #Available units: kPa, bar, atm.
     dimensions = 'x'
     section = 'prod'
     sort = None
     sortDataFrames = 'P'
+    countDataFrom = 0
     joinDataFrames = True
 
     # Running code.
-    ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,sort)
+    # ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,sort)
     raspaData = ExtractFromRaspa(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,
-                                 sortDataFrames,joinDataFrames)
+                                 sortDataFrames,joinDataFrames,countDataFrom)
+    print()
 
     ###############################################################################################################
     ############### From now on, the lines below have to be edited by the user. ###################################
-    # Edit raspaData.
-    # pSat300K = 778e-3 #Saturation pressure at 300 K in kPa.
-    # raspaData['Rho[g/cm^3]'] = raspaData['Rho[kg/m^3] TIP4P-2005']*1e-3
-    # raspaData['deltaRho[g/cm^3]'] = raspaData['deltaRho[kg/m^3] TIP4P-2005']*1e-3
-    # raspaData['p/p0'] = raspaData['P[kPa]']/pSat300K*0.036
-    # print(raspaData)
+    # # Edit raspaData.
+    # raspaData['ExMu[kcal/mol]'] = raspaData['ExMu[K] TIP4P-2005']*kb*avogadro*2.39e-4
+    # raspaData['deltaExMu[kcal/mol]'] = raspaData['deltaExMu[K] TIP4P-2005']*kb*avogadro*2.39e-4
+    # raspaData['Rho[m^-3]'] = raspaData['N TIP4P-2005']/raspaData['V[A^3]']*1e30
+    # TIP4P2005mass = 18.015e-3/avogadro #kg
+    # debroglie = np.sqrt(planck**2/(2.0*np.pi*TIP4P2005mass*kb*raspaData['T[K]']))
+    # p0 = raspaData['P[kPa]'].values[1]
+    # mu0 = raspaData['T[K]']*np.log(raspaData['Rho[m^-3]'].values[1]*debroglie**3)*kb*avogadro*2.39e-4
+    # raspaData['p/p0'] = raspaData['P[kPa]']/p0
+    # raspaData['IdMu[kcal/mol]'] = mu0 + raspaData['T[K]']*np.log(raspaData['p/p0'])*kb*avogadro*2.39e-4
+    # raspaData['Mu[kcal/mol]'] = raspaData['IdMu[kcal/mol]']+raspaData['ExMu[kcal/mol]']
+    # raspaData['IdMu[K]'] = raspaData['IdMu[kcal/mol]']/(kb*avogadro)*4184
+    # raspaData['deltaMu[kcal/mol]'] = raspaData['deltaExMu[kcal/mol]']
+    # print(raspaData[['p/p0','Mu[kcal/mol]','IdMu[kcal/mol]','ExMu[kcal/mol]','deltaMu[kcal/mol]']])
 
     # # Read paper files.
     # paperData = pd.read_csv('../paperIsotherm-10A-300K.csv',skiprows=5,sep=',')[:-1]
@@ -168,9 +179,9 @@ if __name__=='__main__':
 
     # # Plot dataframes.
     # fig,axs = plt.subplots(1)
-    # raspaData[8:].plot(x='p/p0',y='Rho[g/cm^3]',ax=axs,yerr='deltaRho[g/cm^3]',capsize=3,fmt='.',label='RASPA-GCMC')
-    # paperData.plot(x='p/p0',y='rho[g/cm^3]',ax=axs,style='--',label='Guse, C.\'s',logx=True)
-    # axs.set_ylabel('$\\rho$ [g/$cm^3$]'); axs.set_xlabel('$P/P_0$')
+    # raspaData.plot(x='p/p0',y='Mu[kcal/mol]',ax=axs,yerr='deltaMu[kcal/mol]',capsize=3,fmt='.',label='$\mu_{W}$')
+    # raspaData.plot(x='p/p0',y='IdMu[kcal/mol]',ax=axs,style='--',label='$\mu_{id}$')
+    # axs.set_ylabel('$\mu$ [kcal/mol]'); axs.set_xlabel('$P/P_0$')
     # axs.legend()
     # fig.tight_layout()
-    # fig.savefig('../Guse10A.pdf')
+    # fig.savefig('../JasonMu.pdf')
