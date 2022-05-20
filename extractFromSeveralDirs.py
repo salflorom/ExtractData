@@ -80,12 +80,12 @@ def CreateDataFrame(outputRaspaPath,dataFileName,inputSubPath,variables,units,di
         if i.endswith(f'{dataFileName}.dat'):
             df = pd.read_csv(outputRaspaPath+'dataFiles/'+i,sep='\t')
             for var in df.columns:
-                if (df[var].count() > 2):
+                if (df[var].count() > 1):
                     reducedData[var].append(df[var][3:].mean())
                     reducedData['delta'+var].append(df[var][3:].std())
-                elif (df[var].count() == 2):
+                elif (df[var].count() == 1):
                     reducedData[var].append(df[var].values[0])
-                    reducedData['delta'+var].append(df[var].values[1])
+                    # reducedData['delta'+var].append(df[var].values[1])
                 else:
                     reducedData[var].append(df[var].values[0])
                     reducedData['delta'+var].append(0.0)
@@ -98,6 +98,15 @@ def CreateDataFrame(outputRaspaPath,dataFileName,inputSubPath,variables,units,di
             reducedData.sort_values(sortVal.group(),inplace=True,ignore_index=True)
             break
     return reducedData
+def JoinDataFrames(dataFrames,sort):
+    concatDataFrame = pd.concat(dataFrames).reset_index()
+    concatDataFrame.drop(columns={'level_1'},inplace=True)
+    concatDataFrame.rename(columns={'level_0':'Directory'},inplace=True)
+    for key in concatDataFrame.columns:
+        findSortValue = re.search(f'^{sort}\[.+',key)
+        if findSortValue: concatDataFrame.sort_values(findSortValue.group(),ignore_index=True,inplace=True)
+    return concatDataFrame
+
 if __name__=='__main__':
     # Input parameters.
     dirsPath = '../lochness-entries/'
@@ -105,11 +114,12 @@ if __name__=='__main__':
     outputRaspaPath = '../'
 
     species = 'TIP4P-2005'
-    variables = 'Mu P T N V Rho' 
+    variables = 'Mu P T N V' 
     units = 'kPa' #Available units: kPa, bar, atm.
     dimensions = 'x'
     section = 'prod'
     sort = 'P'
+    joinDataFrames = True
 
     # Running code.
     ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,sort)
@@ -119,6 +129,9 @@ if __name__=='__main__':
         dataFrames[name] = CreateDataFrame(outputRaspaPath,name,inputSubPath,variables,units,dimensions,species,sort)
         print('\n'+name)
         print(dataFrames[name])
+    if joinDataFrames: 
+        dataFrame = JoinDataFrames(dataFrames,sort)
+        print('\nConcatenated dataframe:'); print(dataFrame)
 
     ###############################################################################################################
     ############### From now on, the lines below have to be edited by the user. ###################################

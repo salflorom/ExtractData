@@ -26,7 +26,7 @@ def ExtractVolumes(fileLines,sections):
             for line in range(len(fileLines)):
                 findVolume = re.search(r'Volume:\s+(\d+\.?\d*).+Average\s+Volume:',fileLines[line])
                 if findVolume: volumes.append(float(findVolume.group(1))) #A^3
-    return volumes
+    return pd.Series(volumes,index=range(len(volumes)))
 def ExtractPressures(fileName,fileLines,unit,sections):
     pressures = []
     for sec in sections:
@@ -138,7 +138,7 @@ def ExtractNumberOfMoleculesPerComponent(fileLines,component,sections):
             for line in range(len(fileLines)):
                 findAmountMolecules = re.search(f'Component.+\({component}\).+molecules:\s+(\d+)/.+\(',fileLines[line])
                 if findAmountMolecules: nMolecules.append(float(findAmountMolecules.group(1)))
-    return nMolecules
+    return pd.Series(nMolecules,index=range(len(nMolecules)))
 def ExtractWidomChemicalPotentialPerComponent(fileLines,component,sections):
     for sec in sections:
         chemPots,deltaChemPots = [],[]
@@ -162,7 +162,7 @@ def ExtractWidomChemicalPotentialPerComponent(fileLines,component,sections):
                     findChemPot = re.search(f'Component\s+\[{component}\].+average chemical potential:\s+(-?\d+\.?\d*)',fileLines[line]) #J/kb
                     if findChemPot: chemPots.append(float(findChemPot.group(1)))
     if (len(chemPots) == 0): 
-        print('Warning: No chemical potential was found from RASPA.'); chemPots.append(np.nan)
+        print('Warning: None chemical potential was found from RASPA.'); chemPots.append(np.nan)
     if (len(chemPots) == 0): deltaChemPots.append(np.nan)
     return pd.Series(chemPots,index=range(len(chemPots))),pd.Series(deltaChemPots,index=range(len(deltaChemPots)))
 def CallExtractors(varsToExtract,fileName,fileLines,components,dimensions,unit,sections):
