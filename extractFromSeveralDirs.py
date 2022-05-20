@@ -106,7 +106,19 @@ def JoinDataFrames(dataFrames,sort):
         findSortValue = re.search(f'^{sort}\[.+',key)
         if findSortValue: concatDataFrame.sort_values(findSortValue.group(),ignore_index=True,inplace=True)
     return concatDataFrame
-
+def ExtractFromRaspa(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,sort,joinDataFrames):
+    dataFiles = SearchDataFiles(dirsPath,outputRaspaPath)
+    dataFrames = {}
+    for name in sorted(dataFiles.keys()): 
+        dataFrames[name] = CreateDataFrame(outputRaspaPath,name,inputSubPath,variables,units,dimensions,species,sort)
+        print('\n'+name)
+        print(dataFrames[name])
+    if joinDataFrames: 
+        dataFrame = JoinDataFrames(dataFrames,sort)
+        print('\nConcatenated dataframe:'); print(dataFrame)
+        return dataFrame
+    return dataFrames
+####################################################################################################################
 if __name__=='__main__':
     # Input parameters.
     dirsPath = '../lochness-entries/'
@@ -123,15 +135,7 @@ if __name__=='__main__':
 
     # Running code.
     ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,sort)
-    dataFiles = SearchDataFiles(dirsPath,outputRaspaPath)
-    dataFrames = {}
-    for name in sorted(dataFiles.keys()): 
-        dataFrames[name] = CreateDataFrame(outputRaspaPath,name,inputSubPath,variables,units,dimensions,species,sort)
-        print('\n'+name)
-        print(dataFrames[name])
-    if joinDataFrames: 
-        dataFrame = JoinDataFrames(dataFrames,sort)
-        print('\nConcatenated dataframe:'); print(dataFrame)
+    raspaData = ExtractFromRaspa(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,sort,joinDataFrames)
 
     ###############################################################################################################
     ############### From now on, the lines below have to be edited by the user. ###################################
