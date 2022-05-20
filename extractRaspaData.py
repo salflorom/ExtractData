@@ -165,6 +165,62 @@ def ExtractWidomChemicalPotentialPerComponent(fileLines,component,sections):
         print('Warning: None chemical potential was found from RASPA.'); chemPots.append(np.nan)
     if (len(chemPots) == 0): deltaChemPots.append(np.nan)
     return pd.Series(chemPots,index=range(len(chemPots))),pd.Series(deltaChemPots,index=range(len(deltaChemPots)))
+def ExtractIdealWidomChemicalPotentialPerComponent(fileLines,component,sections):
+    for sec in sections:
+        chemPots,deltaChemPots = [],[]
+        if (sec.lower() == 'init'):
+            print('Warning: Ideal-gas Chemical potential is not calculated by RASPA during initialization and equilibration cycles.')
+        elif (sec.lower() == 'prod'):
+            for line in range(len(fileLines)-1,0,-1):
+                findChemPot = re.search('Average Widom Ideal-gas contribution',fileLines[line])
+                if findChemPot:
+                    for subline in range(line+8,len(fileLines),7):
+                        chemPot = re.search(f'\[{component}\].+Ideal-gas.+?(-?\d+\.?\d*)\s+.+?(\d+\.?\d*)',fileLines[subline])
+                        if chemPot: 
+                            chemPots.append(float(chemPot.group(1))) #J/kb
+                            deltaChemPots.append(float(chemPot.group(2))) #J/kb
+                            break
+                    break
+            if not findChemPot:
+                print('Warning: Tried to read ideal-gas chemical potential, but simulation hasn\'t ended properly.')
+                print('Extracting current ideal-gas chemical potentials per cycle.')
+                for line in range(len(fileLines)):
+                    findWidom = re.search(f'Component \[{component}\] average Widom',fileLines[line])
+                    if findWidom:
+                        findChemPot = re.search('ideal-gas.+?(-?\d+\.?\d*)',fileLines[line+1]) #J/kb
+                        if findChemPot: chemPots.append(float(findChemPot.group(1)))
+    if (len(chemPots) == 0): 
+        print('Warning: None ideal-gas chemical potential was found from RASPA.'); chemPots.append(np.nan)
+    if (len(chemPots) == 0): deltaChemPots.append(np.nan)
+    return pd.Series(chemPots,index=range(len(chemPots))),pd.Series(deltaChemPots,index=range(len(deltaChemPots)))
+def ExtractExcessWidomChemicalPotentialPerComponent(fileLines,component,sections):
+    for sec in sections:
+        chemPots,deltaChemPots = [],[]
+        if (sec.lower() == 'init'):
+            print('Warning: Excess Chemical potential is not calculated by RASPA during initialization and equilibration cycles.')
+        elif (sec.lower() == 'prod'):
+            for line in range(len(fileLines)-1,0,-1):
+                findChemPot = re.search('Average Widom excess contribution',fileLines[line])
+                if findChemPot:
+                    for subline in range(line+8,len(fileLines),7):
+                        chemPot = re.search(f'\[{component}\].+excess chemical.+?(-?\d+\.?\d*)\s+.+?(\d+\.?\d*)',fileLines[subline])
+                        if chemPot: 
+                            chemPots.append(float(chemPot.group(1))) #J/kb
+                            deltaChemPots.append(float(chemPot.group(2))) #J/kb
+                            break
+                    break
+            if not findChemPot:
+                print('Warning: Tried to read excess chemical potential, but simulation hasn\'t ended properly.')
+                print('Extracting current excess chemical potentials per cycle.')
+                for line in range(len(fileLines)):
+                    findWidom = re.search(f'Component \[{component}\] average Widom',fileLines[line])
+                    if findWidom:
+                        findChemPot = re.search('excess chemical.+?(-?\d+\.?\d*)',fileLines[line+1]) #J/kb
+                        if findChemPot: chemPots.append(float(findChemPot.group(1)))
+    if (len(chemPots) == 0): 
+        print('Warning: None excess chemical potential was found from RASPA.'); chemPots.append(np.nan)
+    if (len(chemPots) == 0): deltaChemPots.append(np.nan)
+    return pd.Series(chemPots,index=range(len(chemPots))),pd.Series(deltaChemPots,index=range(len(deltaChemPots)))
 def CallExtractors(varsToExtract,fileName,fileLines,components,dimensions,unit,sections):
     outData = {}
     if ('V' in varsToExtract): outData['V[A^3]'] = ExtractVolumes(fileLines,sections)
@@ -176,6 +232,16 @@ def CallExtractors(varsToExtract,fileName,fileLines,components,dimensions,unit,s
             chemPots,deltaChemPots = ExtractWidomChemicalPotentialPerComponent(fileLines,comp,sections)
             outData['Mu[K]'+f' {comp}'] = chemPots
             if (len(deltaChemPots) != 0): outData['deltaMu[K]'+f' {comp}'] = deltaChemPots
+    if ('IdMu' in varsToExtract): 
+        for comp in components:
+            chemPots,deltaChemPots = ExtractIdealWidomChemicalPotentialPerComponent(fileLines,comp,sections)
+            outData['IdMu[K]'+f' {comp}'] = chemPots
+            if (len(deltaChemPots) != 0): outData['deltaIdMu[K]'+f' {comp}'] = deltaChemPots
+    if ('ExMu' in varsToExtract): 
+        for comp in components:
+            chemPots,deltaChemPots = ExtractExcessWidomChemicalPotentialPerComponent(fileLines,comp,sections)
+            outData['ExMu[K]'+f' {comp}'] = chemPots
+            if (len(deltaChemPots) != 0): outData['deltaExMu[K]'+f' {comp}'] = deltaChemPots
     if ('Rho' in varsToExtract): 
         for comp in components:
             outData['Rho[kg/m^3]'+f' {comp}'] = ExtractDensitiesPerComponent(fileLines,comp,sections)
@@ -274,10 +340,14 @@ def Help():
     print('\t\t\tThree different units can be specified: kPa, atm or bar. By default, kPa.')
     print('\t\tU: Internal energy in K (J/kb).')
     print('\t\t\tSimulation must have ended to be extracted.')
-    print('\t\t\tOnly two values will be printed: Average (1st row) and its standard deviation (2nd row).')
     print('\t\tMu: Chemical Potential in K (J/kb) by Widom insertion method.')
     print('\t\t\tSimulation must have ended to be extracted.')
-    print('\t\t\tOnly two values will be printed: Average (1st row) and its standard deviation (2nd row).')
+    print('\t\t\tRequires the components to be indicated.')
+    print('\t\tIdMu: Ideal-gas Chemical Potential in K (J/kb) by Widom insertion method.')
+    print('\t\t\tSimulation must have ended to be extracted.')
+    print('\t\t\tRequires the components to be indicated.')
+    print('\t\tExMu: Excess Chemical Potential in K (J/kb) by Widom insertion method.')
+    print('\t\t\tSimulation must have ended to be extracted.')
     print('\t\t\tRequires the components to be indicated.')
     print('\t\tRho: Density in kg/m^3.')
     print('\t\t\tRequires the components to be indicated.')
@@ -289,7 +359,7 @@ def Help():
     print('\tThe following command would extract the volume and internal energy of a methane-benzene binary mixture from Output/System_1,')
     print('\tas well as the pressure (in atm) and the box-length in the x direction.')
     print('\tThe extracted data would be saved in the file excessProps.dat')
-    print('\tpython3 extractRaspaData.py -I Outputs/System_1/ -o ./excessProps.dat -s prod -C methane benzene -v U V P L -U atm -d x -p')
+    print('\tpython3 extractRaspaData.py -I Outputs/System_1/ -o ./excessProps.dat -t prod -C methane benzene -v U V P L -U atm -d x -p -s P')
     exit(1)
 def CreateDataFrame(outData,components,dimensions,sort):
     keys = list(outData.keys())

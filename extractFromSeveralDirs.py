@@ -74,6 +74,20 @@ def CreateDataFrame(outputRaspaPath,dataFileName,inputSubPath,variables,units,di
             for i in range(len(spcs)):
                 spcVar = var+f' {spcs[i]}'; reducedData[spcVar] = []
                 deltaVar += f' {spcs[i]}'; reducedData[deltaVar] = []
+        elif (var == 'IdMu'): 
+            var += '[K]'
+            deltaVar = 'delta'+var
+            spcs = species.split(' ')
+            for i in range(len(spcs)):
+                spcVar = var+f' {spcs[i]}'; reducedData[spcVar] = []
+                deltaVar += f' {spcs[i]}'; reducedData[deltaVar] = []
+        elif (var == 'ExMu'): 
+            var += '[K]'
+            deltaVar = 'delta'+var
+            spcs = species.split(' ')
+            for i in range(len(spcs)):
+                spcVar = var+f' {spcs[i]}'; reducedData[spcVar] = []
+                deltaVar += f' {spcs[i]}'; reducedData[deltaVar] = []
     #Create DataFrame
     dirs = os.listdir(outputRaspaPath+'dataFiles/')
     for i in dirs:
@@ -126,16 +140,18 @@ if __name__=='__main__':
     outputRaspaPath = '../'
 
     species = 'TIP4P-2005'
-    variables = 'Mu P T N V' 
+    variables = 'IdMu ExMu Mu P T N V' 
     units = 'kPa' #Available units: kPa, bar, atm.
     dimensions = 'x'
     section = 'prod'
-    sort = 'P'
+    sort = None
+    sortDataFrames = 'P'
     joinDataFrames = True
 
     # Running code.
     ExecuteExtractRaspaDataPy(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,sort)
-    raspaData = ExtractFromRaspa(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,sort,joinDataFrames)
+    raspaData = ExtractFromRaspa(dirsPath,inputSubPath,outputRaspaPath,species,variables,units,dimensions,section,
+                                 sortDataFrames,joinDataFrames)
 
     ###############################################################################################################
     ############### From now on, the lines below have to be edited by the user. ###################################
