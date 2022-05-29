@@ -66,5 +66,5 @@ Example:<br>
 The following command would extract the volume and internal energy of a methane-benzene binary mixture from Output/System_1,<br>
 as well as the pressure (in atm) and the box-length in the x direction.<br>
 The extracted data would be saved in the file excessProps.dat<br>
-> python3 extractRaspaData.py -I Outputs/System_1/ -o ./excessProps.dat -s prod -C methane benzene -v U V P L -U atm -d x -p<br>
+> python3 extractRaspaData.py -I Outputs/System_1/ -o ./excessProps.dat -t prod -C methane benzene -v U V P L -U atm -d x -p -s P <br> 
 
