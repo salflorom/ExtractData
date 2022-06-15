@@ -187,10 +187,13 @@ class Raspa(Extract):
         print(f'\tBox dimensions: {dimensions}')
         print(f'\tCreate figures: {createFigures}')
         print(f'\tCreate output file: {createOutFile}')
+        print(f'\tInput files:')
         for i in range(len(listInFiles)):
-            print(f'\tInput file:')
             print(f'\t\t{listInFiles[i]}')
-            if createOutFile: print(f'\tOutput file: {i}_{outFileName}')
+        if createOutFile: 
+            print(f'\t\tOutput files:')
+            for i in range(len(listInFiles)):
+                print('{i}_{outFileName}')
     def CallExtractors(self,fileName):
         path = self.path
         varsToExtract = self.varsToExtract
@@ -493,10 +496,9 @@ class Chainbuild(Extract):
         print(f'\tBox dimensions: {dimensions}')
         print(f'\tCreate figures: {createFigures}')
         print(f'\tCreate output file: {createOutFile}')
+        print(f'\tInput files:')
         for i in range(len(listInFiles)):
-            print(f'\tInput file:')
             print(f'\t\t{listInFiles[i]}')
-            if createOutFile: print(f'\tOutput file: {i}_{outFileName}')
     def CallExtractors(self,inputFileName):
         varsToExtract = self.varsToExtract
         components = self.components
@@ -528,7 +530,7 @@ class Chainbuild(Extract):
         chemPots = []
         with open(path+inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
         for line in range(len(fileLines)):
-            findEnsemble = re.search(f'ens\s+(\w+)\s+?(\d+\.?\d*)',fileLines[line])
+            findEnsemble = re.search(f'ens\s+(\w+)\s+?(-?\d+\.?\d*)',fileLines[line])
             if findEnsemble: 
                 if findEnsemble.group(1) == 'gce':
                     print('Ensemble is \"GCE\". Reading chemical potentials input file.')
@@ -541,7 +543,7 @@ class Chainbuild(Extract):
                         if findChemPot: chemPots.append(float(findChemPot.group(1)))
                 break
         if (len(chemPots) == 0): 
-            print('Warning: Chemical potential was found from Chainbuild'); chemPots.append(np.nan)
+            print('Warning: Chemical potential was not found from Chainbuild'); chemPots.append(np.nan)
         return pd.Series(chemPots,index=range(len(chemPots)))*eps #K
     def ExtractIdealWidomChemicalPotential(self,logFileName):
         path = self.path
@@ -554,7 +556,7 @@ class Chainbuild(Extract):
                 chemPots.append(float(findChemPot.group(1))); break #J/(kb*eps_ff)
         if (len(chemPots) == 0): 
             print('Warning: Tried to read ideal chemical potential, but simulation hasn\'t ended properly.')
-            print('Warning: None ideal chemical potential was found from Chainbuild.'); chemPots.append(np.nan)
+            print('Warning: None ideal chemical potential was not found from Chainbuild.'); chemPots.append(np.nan)
         return pd.Series(chemPots,index=range(len(chemPots)))*epsilon #K
     def ExtractFluidFluidEnergy(self,logFileName):
         path = self.path
@@ -566,7 +568,7 @@ class Chainbuild(Extract):
             findEnergy = re.search(r'Uff=\s+(-?\d+\.?\d*\w?[-+]?\d*)',fileLines[line])
             if findEnergy: energies.append(float(findEnergy.group(1))) #J/(kb*eps_ff)
         if (len(energies) == 0): 
-            print('Warning: No fluid-fluid energy was found from Chainbuild.'); energies.append(np.nan)
+            print('Warning: No fluid-fluid energy was not found from Chainbuild.'); energies.append(np.nan)
         return pd.Series(energies,index=range(len(energies)))*epsilon #K
     def ExtractSolidFluidEnergy(self,logFileName):
         path = self.path
@@ -578,27 +580,27 @@ class Chainbuild(Extract):
             findEnergy = re.search(r'Usf=\s+(-?\d+\.?\d*\w?[-+]?\d*)',fileLines[line])
             if findEnergy: energies.append(float(findEnergy.group(1))) #J/(kb*eps_ff)
         if (len(energies) == 0): 
-            print('Warning: No solid-fluid energy was found from Chainbuild.'); energies.append(np.nan)
+            print('Warning: No solid-fluid energy was not found from Chainbuild.'); energies.append(np.nan)
         return pd.Series(energies,index=range(len(energies)))*epsilon #K
     def ExtractNumberOfMolecules(self,inputFileName,logFileName):
         path = self.path
         nMolecules = []
         with open(path+inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
         for line in range(len(fileLines)):
-            findNMolecules = re.search(f'ens\s+(\w+)\s+?(\d+\.?\d*)',fileLines[line])
+            findNMolecules = re.search(r'ens\s+(\w+)\s+?(-?\d+\.?\d*)',fileLines[line])
             if findNMolecules: 
                 if findNMolecules.group(1) == 'nvt':
                     print('Ensemble is \"NVT\". Reading number of molecules from input file.')
                     nMolecules.append(float(findNMolecules.group(2)))
                 elif findNMolecules.group(1) == 'gce':
                     print('Ensemble is \"GCE\". Reading number of molecules from log file.')
-                    with open(logFileName,'r') as logFile: fileLines = logFile.readlines()
+                    with open(path+logFileName,'r') as logFile: fileLines = logFile.readlines()
                     for line in range(len(fileLines)):
                         findNMolecules = re.search(f'N=\s+(\d+\.?\d*\w?[-+]?\d*)',fileLines[line])
                         if findNMolecules: nMolecules.append(float(findNMolecules.group(1)))
                 break
         if (len(nMolecules) == 0): 
-            print('Warning: Number of molecules was found from Chainbuild'); nMolecules.append(np.nan)
+            print('Warning: Number of molecules was not found from Chainbuild'); nMolecules.append(np.nan)
         return pd.Series(nMolecules,index=range(len(nMolecules)))
     def ExtractBoxLengths(self,inputFileName,dimLetter):
         path = self.path
@@ -611,13 +613,13 @@ class Chainbuild(Extract):
             dimension = {'x':1,'y':2,'z':3}
             with open(path+solidFileName,'r') as solidFile: fileLines = solidFile.readlines()
             for line in range(len(fileLines)):
-                findLengths = re.search(r'(\d+\.?\d*)\s+(\d+\.?\d*)\s+(\d+\.?\d*)',fileLines[line])
-                if findLengths: 
+                findLength = re.search(r'(\d+\.?\d*)\s+(\d+\.?\d*)\s+(\d+\.?\d*)',fileLines[line])
+                if findLength: 
                     boxLengths.append(float(findLength.group(dimension[dimLetter]))); break #nm/sigma_ff
         elif inputFileName:
             with open(path+inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
             for line in range(len(fileLines)):
-                findLengths = re.search(r'ens.+?\d+\.?\d*\s+(\d+\.?\d*)',fileLines[line])
+                findLengths = re.search(r'solid.+?(-?\d+\.?\d*)',fileLines[line])
                 if findLengths: 
                     boxLengths.append(float(findLengths.group(1))); break #nm/sigma_ff
         if len(boxLengths) == 0:
@@ -643,7 +645,7 @@ class Chainbuild(Extract):
         elif inputFileName:
             with open(path+inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
             for line in range(len(fileLines)):
-                findLengths = re.search(r'ens.+?\d+\.?\d*\s+(\d+\.?\d*)',fileLines[line])
+                findLengths = re.search(r'solid.+?(-?\d+\.?\d*)',fileLines[line])
                 if findLengths:
                     length = float(findLengths.group(1)) #(nm/sigma_ff)^3
                     volume.append(length**3)
@@ -658,7 +660,7 @@ class Chainbuild(Extract):
         with open(path+inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
         temperature = []
         for line in range(len(fileLines)):
-            findTemperature = re.search(r'ens.+?\d+\.?\d*\s+(\d+\.?\d*)',fileLines[line])
+            findTemperature = re.search(r'ens.+?\d+\.?\d*\s+(-?\d+\.?\d*)',fileLines[line])
             if findTemperature:
                 temperature.append(float(findTemperature.group(1))); break
         if len(temperature) == 0:
@@ -670,7 +672,7 @@ class Chainbuild(Extract):
         density = []
         with open(path+inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
         for line in range(len(fileLines)):
-            findEnsemble = re.search(f'ens\s+(\w+)\s+?(\d+\.?\d*)',fileLines[line])
+            findEnsemble = re.search(f'ens\s+(\w+)\s+?(-?\d+\.?\d*)',fileLines[line])
             if findEnsemble: 
                 if findEnsemble.group(1) == 'nvt':
                     print('Ensemble is \"NVT\". Density is not given, but you can calculate it manually.')
@@ -684,7 +686,7 @@ class Chainbuild(Extract):
                         findDensity = re.search(f'<rho>=\s+(\d+\.?\d*\w?[-+]?\d*)',fileLines[line])
                         if findDensity: density.append(float(findDensity.group(1)))
                     if (len(density) == 0): 
-                        print('Warning: Density was found from Chainbuild'); density.append(np.nan)
+                        print('Warning: Density was not found from Chainbuild'); density.append(np.nan)
                 break
         return pd.Series(density,index=range(len(density)))/sigma**3 #Angstrom^-3
 def Help():
