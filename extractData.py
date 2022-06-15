@@ -20,18 +20,16 @@ class Extract():
         self.argv = argv
         self.motor = 'Raspa'
         self.path = './Outputs/System_0/'
+        self.units = 'kPa'
+        self.sort = 'P'
+        self.sections = ['prod']
         self.dimensions = ['x','y','z']
         self.varsToExtract = ['Rho','P']
+        self.components, self.listInFiles, self.outFilePath = [], [], []
         self.outFile = ('outData.dat',False)
-        self.sort = 'P'
         self.printInputParams = self.createFigures = False
-        self.fileLines = 0
-        self.fileName = ''
-        self.dimLetter = ''
-        self.listInFiles = []
-        self.fileNumber = 0
-        self.outFilePath = []
-
+        self.fileLines = self.fileNumber = 0
+        self.fileName, self.dimLetter = '', ''
     def Flags(self):
         argv = self.argv
         printInputParams = self.printInputParams
@@ -68,15 +66,12 @@ class Extract():
                 varsToExtract = []
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
-                    varsToExtract.append(argv[j])
+                    varsToExtract.append(argv[j].lower())
             elif (argv[i] == '-t'): 
                 sections = []
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
                     sections.append(argv[j])
-        if not re.search('-c',' '.join(argv).lower()):
-            print('Error: List of components was not given.\nPrinting help.')
-            self.Help(); sys.exit(1)
         self.printInputParams = printInputParams
         self.createFigures = createFigures
         self.path = path
@@ -87,12 +82,6 @@ class Extract():
         self.components = components
         self.varsToExtract = varsToExtract
         self.sections = sections
-
-    def ReadInputFiles(self):
-        path = self.path
-        listInFiles = os.listdir(path)
-        self.listInFiles = listInFiles
-
     def CreateDataFrame(self,outData):
         dimensions = self.dimensions
         sort = self.sort
@@ -106,14 +95,12 @@ class Extract():
             if findSortKey: 
                 outData.sort_values(findSortKey.group(),ignore_index=True,inplace=True); break
         return outData
-
     def CreateOutFile(self,outData,fileNumber):
         outPath, outFileName, outExtension = self.outFilePath
         if outPath: outPath = f'{outPath}dataFiles/' #If output file is in a subdirectory.
         else: outPath = 'dataFiles/' #If output file is not in a subdirectory.
         os.makedirs(outPath, exist_ok=True)
         outData.to_csv(f'{outPath}{fileNumber}_{outFileName}{outExtension}',sep='\t',index=False,na_rep='NaN')
-
     def ReadOutputFile(self):
         outFile = self.outFile
         outFilePath = re.search(r'^(.+/)?(.+)(\..+)$',outFile[0])
@@ -123,16 +110,14 @@ class Extract():
             outFilePath = outFilePath.group(1,2,3)
         self.outFilePath = outFilePath
         return outFilePath
-
     def PlotVariables(self,outData,fileNumber):
         outPath,outFileName,outExtension = self.outFilePath
-        outData.plot(style='.',subplots=True,grid=True,xlabel='Number of cycles')
+        outData.plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
         plt.tight_layout()
         if outPath: outPath += 'Figures/' #If output file is in a subdirectory.
         else: outPath = 'Figures/' #If output file is not in a subdirectory.
         os.makedirs(outPath, exist_ok=True)
         plt.savefig(f'{outPath}{fileNumber}_{outFileName}.pdf')
-
     def ExtractData(self):
         listInFiles = self.listInFiles
         path = self.path
@@ -140,35 +125,48 @@ class Extract():
         outFileName, createOutFile = self.outFile
         for i in range(len(listInFiles)):
             print('\nExtracting data...')
-            with open(path+listInFiles[i],'r') as fileContent: inFileLines = fileContent.readlines()
-            outData = self.CallExtractors(listInFiles[i],inFileLines) # From derived class.
+            outData = self.CallExtractors(listInFiles[i]) # From derived class.
             print('\nOrganizing data...')
             outData = self.CreateDataFrame(outData)
             print(outData)
             print(outData.describe())
             if createOutFile:
                 outPath, outFileName, outExtension = self.ReadOutputFile()
-                print(f'\nCreating output file: {outPath}dataFiles/{i}_{outFileName}{outExtension} ...')
+                if outPath:
+                    print(f'\nCreating output file: {outPath}dataFiles/{i}_{outFileName}{outExtension} ...')
+                else: 
+                    print(f'\nCreating output file: dataFiles/{i}_{outFileName}{outExtension} ...')
                 self.CreateOutFile(outData,i)
                 if createFigures: 
                     print('\nCreating figures...')
                     self.PlotVariables(outData,i)
             else:
                 if createFigures: 
-                    _ = self.ReadOutputFile(outFile)
+                    _ = self.ReadOutputFile()
                     print('\nCreating figures...')
-                    self.PlotVariables(outData)
+                    self.PlotVariables(outData,i)
             print(f'\nNormal termination for file {listInFiles[i]}')
         print(f'\nNormal termination.')
         exit(0)
-
 class Raspa(Extract):
-    def __init__(self): 
-        Extract.__init__(self,argv)
-        self.components = []
-        self.units = 'kPa'
-        self.sections = ['prod']
-
+    def __init__(self): Extract.__init__(self,argv)
+    def FindComponents(self,inputFileName):
+        with open(inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
+        for line in range(len(fileLines)):
+            findLine = re.search('Amount of molecules per component:',fileLines[line])
+            if findLine: 
+                for subline in range(line+2,len(fileLines)):
+                    findDashedLine = re.search('---',fileLines[subline])
+                    if findDashedLine: break
+                    findComponent = re.search('Component\s+?\d+\s+?\((.+?)\)',fileLines[subline])
+                    self.components.append(findComponent.group(1))
+                break
+    def ReadInputFiles(self):
+        argv = self.argv
+        path = self.path
+        listInFiles = os.listdir(path)
+        self.listInFiles = listInFiles
+        self.FindComponents(path+listInFiles[0])
     def PrintInputParameters(self):
         path = self.path
         varsToExtract = self.varsToExtract
@@ -193,44 +191,44 @@ class Raspa(Extract):
             print(f'\tInput file:')
             print(f'\t\t{listInFiles[i]}')
             if createOutFile: print(f'\tOutput file: {i}_{outFileName}')
-
-    def CallExtractors(self,fileName,fileLines):
+    def CallExtractors(self,fileName):
+        path = self.path
         varsToExtract = self.varsToExtract
         components = self.components
         dimensions = self.dimensions
         units = self.units
         sections = self.sections
         outData = {}
-        if ('V' in varsToExtract): outData['V[A^3]'] = self.ExtractVolumes(fileLines)
-        if ('T' in varsToExtract): outData['T[K]'] = self.ExtractTemperatures(fileName,fileLines)
-        if ('P' in varsToExtract): outData[f'P[{units}]'] = self.ExtractPressures(fileName,fileLines)
-        if ('U' in varsToExtract): outData['U[K]'] = self.ExtractInternalEnergy(fileLines)
-        if ('Mu' in varsToExtract): 
+        with open(path+fileName,'r') as fileContent: fileLines = fileContent.readlines()
+        if ('v' in varsToExtract): outData['V[A^3]'] = self.ExtractVolumes(fileLines)
+        if ('t' in varsToExtract): outData['T[K]'] = self.ExtractTemperatures(fileName,fileLines)
+        if ('p' in varsToExtract): outData[f'P[{units}]'] = self.ExtractPressures(fileName,fileLines)
+        if ('u' in varsToExtract): outData['U[K]'] = self.ExtractInternalEnergy(fileLines)
+        if ('mu' in varsToExtract): 
             for comp in components:
                 chemPots,deltaChemPots = self.ExtractWidomChemicalPotential(fileLines,comp)
                 outData['Mu[K]'+f' {comp}'] = chemPots
                 if (len(deltaChemPots) != 0): outData['deltaMu[K]'+f' {comp}'] = deltaChemPots
-        if ('IdMu' in varsToExtract): 
+        if ('idmu' in varsToExtract): 
             for comp in components:
                 chemPots,deltaChemPots = self.ExtractIdealWidomChemicalPotential(fileLines,comp)
                 outData['IdMu[K]'+f' {comp}'] = chemPots
                 if (len(deltaChemPots) != 0): outData['deltaIdMu[K]'+f' {comp}'] = deltaChemPots
-        if ('ExMu' in varsToExtract): 
+        if ('exmu' in varsToExtract): 
             for comp in components:
-                chemPots,deltaChemPots = self,ExtractExcessWidomChemicalPotential(fileLines,comp)
+                chemPots,deltaChemPots = self.ExtractExcessWidomChemicalPotential(fileLines,comp)
                 outData['ExMu[K]'+f' {comp}'] = chemPots
                 if (len(deltaChemPots) != 0): outData['deltaExMu[K]'+f' {comp}'] = deltaChemPots
-        if ('Rho' in varsToExtract): 
+        if ('rho' in varsToExtract): 
             for comp in components:
                 outData['Rho[kg/m^3]'+f' {comp}'] = self.ExtractDensities(fileLines,comp)
-        if ('N' in varsToExtract): 
+        if ('n' in varsToExtract): 
             for comp in components:
                 outData['N'+f' {comp}'] = self.ExtractNumberOfMolecules(fileLines,comp)
-        if ('L' in varsToExtract): 
+        if ('l' in varsToExtract): 
             for dim in dimensions:
                 outData['Box-L[A]'+f' {dim}'] = self.ExtractBoxLengths(fileLines,dim)
         return outData
-
     def ExtractVolumes(self,fileLines):
         sections = self.sections
         volumes = []
@@ -244,7 +242,6 @@ class Raspa(Extract):
                     findVolume = re.search(r'Volume:\s+(\d+\.?\d*).+Average\s+Volume:',fileLines[line])
                     if findVolume: volumes.append(float(findVolume.group(1))) #A^3
         return pd.Series(volumes,index=range(len(volumes)))
-
     def ExtractPressures(self,fileName,fileLines):
         units = self.units
         sections = self.sections
@@ -258,11 +255,10 @@ class Raspa(Extract):
         if (len(pressures) == 0):
             print('No molecular pressures were found. Extracting fixed external pressure.')
             findPressure = re.search(f'.+_(\d+\.?\d*e?\+?\d*)\.data',fileName)
-            if unit == 'bar': pressures.append(float(findPressure.group(1))*1e-5)
-            elif unit == 'atm': pressures.append(float(findPressure.group(1))*9.896e-6)
+            if units == 'bar': pressures.append(float(findPressure.group(1))*1e-5)
+            elif units == 'atm': pressures.append(float(findPressure.group(1))*9.896e-6)
             else: pressures.append(float(findPressure.group(1))*1e-3) #kPa
         return pd.Series(pressures,index=range(len(pressures)))
-
     def ExtractTemperatures(self,fileName,fileLines):
         sections = self.sections
         temperatures = []
@@ -280,7 +276,6 @@ class Raspa(Extract):
                 print('No molecular temperatures were found. Extracting fixed external temperatures.')
                 temperatures.append(float(re.search('.+_(\d+\.?\d*)_\d+\.?\d*e?\+?\d*\.data',fileName).group(1)))
         return pd.Series(temperatures,index=range(len(temperatures)))
-
     def ExtractInternalEnergy(self,fileLines):
         sections = self.sections
         energies,deltaEnergies = [],[]
@@ -326,7 +321,6 @@ class Raspa(Extract):
             print('Warning: No energy was found from RASPA.'); energies.append(np.nan)
         if (len(deltaEnergies) == 0): deltaEnergies.append(np.nan)
         return pd.Series(energies,index=range(len(energies))),pd.Series(deltaEnergies,index=range(len(deltaEnergies)))
-
     def ExtractDensities(self,fileLines,component):
         sections = self.sections
         densities = []
@@ -340,7 +334,6 @@ class Raspa(Extract):
                     findDensity = re.search(f'Component.+\({component}\).+density:\s+(\d+\.?\d*)\s+\(',fileLines[line])
                     if findDensity: densities.append(float(findDensity.group(1))) #kg/m^3
         return pd.Series(densities,index=range(len(densities)))
-
     def ExtractBoxLengths(self,fileLines,dimLetter):
         sections = self.sections
         dimension = {'x':1,'y':2,'z':3}
@@ -355,7 +348,6 @@ class Raspa(Extract):
                     findLength = re.search(f'Box-lengths:\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+(\d+\.?\d*).+Average',fileLines[line])
                     if findLength: boxLengths.append(float(findLength.group(dimension[dimLetter]))) #A
         return pd.Series(boxLengths,index=range(len(boxLengths)))
-
     def ExtractNumberOfMolecules(self,fileLines,component):
         sections = self.sections
         nMolecules = []
@@ -369,7 +361,6 @@ class Raspa(Extract):
                     findAmountMolecules = re.search(f'Component.+\({component}\).+molecules:\s+(\d+)/.+\(',fileLines[line])
                     if findAmountMolecules: nMolecules.append(float(findAmountMolecules.group(1)))
         return pd.Series(nMolecules,index=range(len(nMolecules)))
-
     def ExtractWidomChemicalPotential(self,fileLines,component):
         sections = self.sections
         for sec in sections:
@@ -397,7 +388,6 @@ class Raspa(Extract):
             print('Warning: None chemical potential was found from RASPA.'); chemPots.append(np.nan)
         if (len(chemPots) == 0): deltaChemPots.append(np.nan)
         return pd.Series(chemPots,index=range(len(chemPots))),pd.Series(deltaChemPots,index=range(len(deltaChemPots)))
-
     def ExtractIdealWidomChemicalPotential(self,fileLines,component):
         sections = self.sections
         for sec in sections:
@@ -427,7 +417,6 @@ class Raspa(Extract):
             print('Warning: None ideal-gas chemical potential was found from RASPA.'); chemPots.append(np.nan)
         if (len(chemPots) == 0): deltaChemPots.append(np.nan)
         return pd.Series(chemPots,index=range(len(chemPots))),pd.Series(deltaChemPots,index=range(len(deltaChemPots)))
-
     def ExtractExcessWidomChemicalPotential(self,fileLines,component):
         sections = self.sections
         for sec in sections:
@@ -457,9 +446,37 @@ class Raspa(Extract):
             print('Warning: None excess chemical potential was found from RASPA.'); chemPots.append(np.nan)
         if (len(chemPots) == 0): deltaChemPots.append(np.nan)
         return pd.Series(chemPots,index=range(len(chemPots))),pd.Series(deltaChemPots,index=range(len(deltaChemPots)))
-
 class Chainbuild(Extract):
-    def __init__(self): Extract.__init__(self,argv)
+    def __init__(self): 
+        Extract.__init__(self,argv)
+        self.listLogFiles = []
+        self.solidFileName = ''
+        self.molFileName = ''
+        self.sigma_ff = self.epsilon_ff = 0
+    def ReadInputFiles(self):
+        path = self.path
+        listInputFiles, listLogFiles = [], []
+        molFileFound = False 
+        for fileName in os.listdir(path):
+            if fileName.endswith('.inp'): listInputFiles.append(fileName)
+            elif fileName.endswith('.log'): listLogFiles.append(fileName)
+            elif fileName.endswith('.sol'): self.solidFileName = fileName 
+            elif fileName.endswith('.mol'): 
+                self.molFileName = fileName
+                self.ExtractLennardJonesParameters(path+fileName)
+                molFileFound = True 
+        if not molFileFound: print('Error: Molecule file not found. Exiting.'); exit(2)
+        listInputFiles.sort(); listLogFiles.sort()
+        self.listInFiles = listInputFiles
+        self.listLogFiles = listLogFiles
+    def ExtractLennardJonesParameters(self,molFileName):
+        with open(molFileName,'r') as molFile: molFileLines = molFile.readlines()
+        for line in molFileLines:
+            findSigma = re.search(r'sigma1?\s+(\d+\.?\d*)',line)
+            findEpsilon = re.search(r'epsilon\s+(\d+\.?\d*)',line)
+            if findSigma: self.sigma_ff = float(findSigma.group(1))
+            if findEpsilon: self.epsilon_ff = float(findEpsilon.group(1))
+        if not (self.sigma_ff and self.epsilon_ff): print('Lennard Jones parameters not found. Exiting.'); exit(2)
     def PrintInputParameters(self):
         path = self.path
         varsToExtract = self.varsToExtract
@@ -480,30 +497,204 @@ class Chainbuild(Extract):
             print(f'\tInput file:')
             print(f'\t\t{listInFiles[i]}')
             if createOutFile: print(f'\tOutput file: {i}_{outFileName}')
-
-    # def CallExtractors(self,fileName,fileLines):
-    # def ExtractVolumes(self,fileLines):
-    # def ExtractTemperatures(self,fileName,fileLines):
-    # def ExtractInternalEnergy(self,fileLines):
-    # def ExtractDensities(self,fileLines):
-    # def ExtractBoxLengths(self,fileLines,dimLetter):
-    # def ExtractNumberOfMolecules(self,fileLines):
-    # def ExtractWidomChemicalPotential(self,fileLines):
-    # def ExtractIdealWidomChemicalPotential(self,fileLines):
-    # def ExtractExcessWidomChemicalPotential(self,fileLines):
-
-def Help(): # Check!
+    def CallExtractors(self,inputFileName):
+        varsToExtract = self.varsToExtract
+        components = self.components
+        dimensions = self.dimensions
+        units = self.units
+        sections = self.sections
+        listLogFiles = self.listLogFiles
+        logFileName = ''
+        for logFile in listLogFiles:
+            if logFile[:-4] == inputFileName[:-4]: 
+                logFileName = logFile; break
+        if not logFileName: print(f'Log file {inputFileName[:-4]}.log not found. Exiting.'); exit(2)
+        outData = {}
+        if ('v' in varsToExtract): outData['V[A^3]'] = self.ExtractVolumes(inputFileName)
+        if ('t' in varsToExtract): outData['T[K]'] = self.ExtractTemperatures(inputFileName)
+        if ('uff' in varsToExtract): outData['Uff[K]'] = self.ExtractFluidFluidEnergy(logFileName)
+        if ('usf' in varsToExtract): outData['Usf[K]'] = self.ExtractSolidFluidEnergy(logFileName)
+        if ('idmu' in varsToExtract): outData['IdMu[K]'] = self.ExtractIdealWidomChemicalPotential(logFileName)
+        if ('mu' in varsToExtract): outData['Mu[K]'] = self.ExtractChemicalPotential(inputFileName,logFileName)
+        if ('rho' in varsToExtract): outData['Rho[A^-3]'] = self.ExtractDensities(inputFileName,logFileName)
+        if ('n' in varsToExtract): outData['N'] = self.ExtractNumberOfMolecules(inputFileName,logFileName)
+        if ('l' in varsToExtract): 
+            for dim in dimensions:
+                outData['Box-L[A]'+f' {dim}'] = self.ExtractBoxLengths(inputFileName,dim)
+        return outData
+    def ExtractChemicalPotential(self,inputFileName,logFileName):
+        path = self.path
+        eps = self.epsilon_ff #K
+        chemPots = []
+        with open(path+inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
+        for line in range(len(fileLines)):
+            findEnsemble = re.search(f'ens\s+(\w+)\s+?(\d+\.?\d*)',fileLines[line])
+            if findEnsemble: 
+                if findEnsemble.group(1) == 'gce':
+                    print('Ensemble is \"GCE\". Reading chemical potentials input file.')
+                    chemPots.append(float(findEnsemble.group(2)))
+                elif findEnsemble.group(1) == 'nvt':
+                    print('Ensemble is \"NVT\". Reading excess chemical potentials from log file.')
+                    with open(path+logFileName,'r') as logFile: fileLines = logFile.readlines()
+                    for line in range(len(fileLines)):
+                        findChemPot = re.search(f'mu_ex=\s+(-?\d+\.?\d*\w?[-+]?\d*)',fileLines[line])
+                        if findChemPot: chemPots.append(float(findChemPot.group(1)))
+                break
+        if (len(chemPots) == 0): 
+            print('Warning: Chemical potential was found from Chainbuild'); chemPots.append(np.nan)
+        return pd.Series(chemPots,index=range(len(chemPots)))*eps #K
+    def ExtractIdealWidomChemicalPotential(self,logFileName):
+        path = self.path
+        epsilon = self.epsilon_ff #K
+        with open(path+logFileName,'r') as logFile: fileLines = logFile.readlines()
+        chemPots = []
+        for line in range(len(fileLines)-1,0,-1):
+            findChemPot = re.search(f'<mu_incr>=\s+(-?\d+\.?\d*\w?-?\d*)',fileLines[line])
+            if findChemPot: 
+                chemPots.append(float(findChemPot.group(1))); break #J/(kb*eps_ff)
+        if (len(chemPots) == 0): 
+            print('Warning: Tried to read ideal chemical potential, but simulation hasn\'t ended properly.')
+            print('Warning: None ideal chemical potential was found from Chainbuild.'); chemPots.append(np.nan)
+        return pd.Series(chemPots,index=range(len(chemPots)))*epsilon #K
+    def ExtractFluidFluidEnergy(self,logFileName):
+        path = self.path
+        epsilon = self.epsilon_ff #K
+        with open(path+logFileName,'r') as logFile: fileLines = logFile.readlines()
+        print('Extracting current fluid-fluid energies per cycle.')
+        energies = []
+        for line in range(len(fileLines)):
+            findEnergy = re.search(r'Uff=\s+(-?\d+\.?\d*\w?[-+]?\d*)',fileLines[line])
+            if findEnergy: energies.append(float(findEnergy.group(1))) #J/(kb*eps_ff)
+        if (len(energies) == 0): 
+            print('Warning: No fluid-fluid energy was found from Chainbuild.'); energies.append(np.nan)
+        return pd.Series(energies,index=range(len(energies)))*epsilon #K
+    def ExtractSolidFluidEnergy(self,logFileName):
+        path = self.path
+        epsilon = self.epsilon_ff #K
+        with open(path+logFileName,'r') as logFile: fileLines = logFile.readlines()
+        print('Extracting current solid-fluid energies per cycle.')
+        energies = []
+        for line in range(len(fileLines)):
+            findEnergy = re.search(r'Usf=\s+(-?\d+\.?\d*\w?[-+]?\d*)',fileLines[line])
+            if findEnergy: energies.append(float(findEnergy.group(1))) #J/(kb*eps_ff)
+        if (len(energies) == 0): 
+            print('Warning: No solid-fluid energy was found from Chainbuild.'); energies.append(np.nan)
+        return pd.Series(energies,index=range(len(energies)))*epsilon #K
+    def ExtractNumberOfMolecules(self,inputFileName,logFileName):
+        path = self.path
+        nMolecules = []
+        with open(path+inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
+        for line in range(len(fileLines)):
+            findNMolecules = re.search(f'ens\s+(\w+)\s+?(\d+\.?\d*)',fileLines[line])
+            if findNMolecules: 
+                if findNMolecules.group(1) == 'nvt':
+                    print('Ensemble is \"NVT\". Reading number of molecules from input file.')
+                    nMolecules.append(float(findNMolecules.group(2)))
+                elif findNMolecules.group(1) == 'gce':
+                    print('Ensemble is \"GCE\". Reading number of molecules from log file.')
+                    with open(logFileName,'r') as logFile: fileLines = logFile.readlines()
+                    for line in range(len(fileLines)):
+                        findNMolecules = re.search(f'N=\s+(\d+\.?\d*\w?[-+]?\d*)',fileLines[line])
+                        if findNMolecules: nMolecules.append(float(findNMolecules.group(1)))
+                break
+        if (len(nMolecules) == 0): 
+            print('Warning: Number of molecules was found from Chainbuild'); nMolecules.append(np.nan)
+        return pd.Series(nMolecules,index=range(len(nMolecules)))
+    def ExtractBoxLengths(self,inputFileName,dimLetter):
+        path = self.path
+        sigma = self.sigma_ff*10 #Angstrom
+        solidFileName = self.solidFileName
+        boxLengths = []
+        print('Warning: Lenghts are not calculated by Chainbuild during simulation.')
+        print('Conserved lengths will be extracted.')
+        if solidFileName:
+            dimension = {'x':1,'y':2,'z':3}
+            with open(path+solidFileName,'r') as solidFile: fileLines = solidFile.readlines()
+            for line in range(len(fileLines)):
+                findLengths = re.search(r'(\d+\.?\d*)\s+(\d+\.?\d*)\s+(\d+\.?\d*)',fileLines[line])
+                if findLengths: 
+                    boxLengths.append(float(findLength.group(dimension[dimLetter]))); break #nm/sigma_ff
+        elif inputFileName:
+            with open(path+inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
+            for line in range(len(fileLines)):
+                findLengths = re.search(r'ens.+?\d+\.?\d*\s+(\d+\.?\d*)',fileLines[line])
+                if findLengths: 
+                    boxLengths.append(float(findLengths.group(1))); break #nm/sigma_ff
+        if len(boxLengths) == 0:
+            print('Error: Given lengths were not found.'); volume.append(np.nan)
+        return pd.Series(boxLengths,index=range(len(boxLengths)))*sigma #Angstrom
+    def ExtractVolumes(self,inputFileName):
+        path = self.path
+        sigma = self.sigma_ff*10 #Angstrom
+        solidFileName = self.solidFileName
+        volume = []
+        print('Warning: Volume is not calculated by Chainbuild during simulation.')
+        print('Conserved volume will be extracted.')
+        if solidFileName:
+            with open(path+solidFileName,'r') as solidFile: fileLines = solidFile.readlines()
+            for line in range(len(fileLines)):
+                findLengths = re.search(r'(\d+\.?\d*)\s+(\d+\.?\d*)\s+(\d+\.?\d*)',fileLines[line])
+                if findLengths:
+                    xLength = float(findLengths.group(1))
+                    yLength = float(findLengths.group(2))
+                    zLength = float(findLengths.group(3))
+                    volume.append(xLength*yLength*zLength) #(nm/sigma_ff)^3
+                    break
+        elif inputFileName:
+            with open(path+inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
+            for line in range(len(fileLines)):
+                findLengths = re.search(r'ens.+?\d+\.?\d*\s+(\d+\.?\d*)',fileLines[line])
+                if findLengths:
+                    length = float(findLengths.group(1)) #(nm/sigma_ff)^3
+                    volume.append(length**3)
+                    break
+        if len(volume) == 0:
+            print('Error: Volume was not found.'); volume.append(np.nan)
+        return pd.Series(volume,index=range(len(volume)))*sigma**3 #A^3
+    def ExtractTemperatures(self,inputFileName):
+        path = self.path
+        print('Warning: Temperature is not calculated by Chainbuild during simulation.')
+        print('External temperature will be extracted.')
+        with open(path+inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
+        temperature = []
+        for line in range(len(fileLines)):
+            findTemperature = re.search(r'ens.+?\d+\.?\d*\s+(\d+\.?\d*)',fileLines[line])
+            if findTemperature:
+                temperature.append(float(findTemperature.group(1))); break
+        if len(temperature) == 0:
+            print('Error: Temperature was not found.'); temperature.append(np.nan)
+        return pd.Series(temperature,index=range(len(temperature))) #K
+    def ExtractDensities(self,inputFileName,logFileName):
+        path = self.path
+        sigma = self.sigma_ff*10 #Angstrom
+        density = []
+        with open(path+inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
+        for line in range(len(fileLines)):
+            findEnsemble = re.search(f'ens\s+(\w+)\s+?(\d+\.?\d*)',fileLines[line])
+            if findEnsemble: 
+                if findEnsemble.group(1) == 'nvt':
+                    print('Ensemble is \"NVT\". Density is not given, but you can calculate it manually.')
+                    density.append(np.nan)
+                elif findNMolecules.group(1) == 'gce':
+                    print('Ensemble is \"GCE\". Reading density from log file.')
+                    print('Warning: Density is not calculated by Chainbuild during simulation.')
+                    print('Final density will be extracted.')
+                    with open(path+logFileName,'r') as logFile: fileLines = logFile.readlines()
+                    for line in range(len(fileLines)):
+                        findDensity = re.search(f'<rho>=\s+(\d+\.?\d*\w?[-+]?\d*)',fileLines[line])
+                        if findDensity: density.append(float(findDensity.group(1)))
+                    if (len(density) == 0): 
+                        print('Warning: Density was found from Chainbuild'); density.append(np.nan)
+                break
+        return pd.Series(density,index=range(len(density)))/sigma**3 #Angstrom^-3
+def Help():
     print('\nDescription:')
-    print('\tThis script extracts the output data generated by RASPA (from production cycles on) and prints it on the Terminal')
-    print('\t(and/or saves it in an output file). Primarily, it was created to analize a system\'s general behavior, but it can also')
-    print('\tbe used to extract data from RASPA\'s outputs in dataframe formats.')
+    print('\tThis script extracts the output data generated by RASPA or Chainbuild, and saves them as data frames.')
     print('Requirements: Numpy and Pandas libraries must be installed.')
-    print('Warning: This script will read only the last data file produced by RASPA in the indicated directory.')
     print('Instructions:')
-    print('\tpython3 extractRaspaData.py [-[Flag] [Arguments]] [-[Flag] [Arguments]] ...')
-    print('\tFlags allowed:')
+    print('\tpython3 extractData.py [-[Flag] [Arguments]] [-[Flag] [Arguments]] ...')
+    print('\tFlags allowed for RASPA and Chainbuild:')
     print('\t\t-h or -H: Call for help.')
-    print('\t\t-t or -T: The types of cycles to analyze: Production cycles (prod) or initialization cycles (init). By default: prod')
     print('\t\t\tEquilibration cycles (if added), are included in initialization cycles.')
     print('\t\t-s or -S: Sort data frame according to a given value. By default, it\'s pressure (P).')
     print('\t\t\tIt can be sorted according to only one value, which must be one of the variables given after the flag -v (or -V).')
@@ -513,39 +704,42 @@ def Help(): # Check!
     print('\t\t-i or -I: Indicate the path where the data file is found. By default: Output/System_0')
     print('\t\t-o or -O: Indicate the "path/fileName" where the extracted data will be printed.')
     print('\t\t\tBy default, no file is created.')
-    print('\t\t-u or -U: Indicate the units for the pressure (kPa, atm or bar). By default: kPa')
-    print('\t\t-c or -C: List of components involved in the simulation (fluid mixture). You must specify the species, even if it was only one')
     print('\t\t-d or -D: List of dimensions to extract the box-lengths. By deafault, the three dimensions.')
     print('\t\t-v or -V: Indicate the list of variables that will be extracted from the RASPA\'s data files (per cycle). By default: Rho and P.')
-    print('\tVariables allowed:')
+    print('\tFlags allowed only for RASPA:')
+    print('\t\t-t or -T: The types of cycles to analyze: Production cycles (prod) or initialization cycles (init). By default: prod')
+    print('\t\t-u or -U: Indicate the units for the pressure (kPa, atm or bar). By default: kPa')
+    print('\tVariables allowed for RASPA and Chainbuild:')
     print('\t\tV: Volume in A^3.')
     print('\t\tT: Temperature in K.')
+    print('\t\tIdMu: Ideal-gas Chemical Potential in K (J/kb) by Widom insertion method.')
+    print('\t\t\tSimulation must have ended to be extracted.')
+    print('\t\tL: Box-length in A.')
+    print('\t\tN: Number of molecules/atoms.') 
+    print('\tVariables allowed only for RASPA:')
     print('\t\tP: Pressure in kPa.')
     print('\t\t\tThree different units can be specified: kPa, atm or bar. By default, kPa.')
     print('\t\tU: Internal energy in K (J/kb).')
-    print('\t\t\tSimulation must have ended to be extracted.')
     print('\t\tMu: Chemical Potential in K (J/kb) by Widom insertion method.')
     print('\t\t\tSimulation must have ended to be extracted.')
-    print('\t\t\tRequires the components to be indicated.')
-    print('\t\tIdMu: Ideal-gas Chemical Potential in K (J/kb) by Widom insertion method.')
-    print('\t\t\tSimulation must have ended to be extracted.')
-    print('\t\t\tRequires the components to be indicated.')
     print('\t\tExMu: Excess Chemical Potential in K (J/kb) by Widom insertion method.')
     print('\t\t\tSimulation must have ended to be extracted.')
-    print('\t\t\tRequires the components to be indicated.')
     print('\t\tRho: Density in kg/m^3.')
-    print('\t\t\tRequires the components to be indicated.')
-    print('\t\tL: Box-length in A.')
-    print('\t\t\tRequires the dimentions to be indicated (x, y or z).')
-    print('\t\tN: Number of molecules/atoms.') 
-    print('\t\t\tRequires the components to be indicated.')
+    print('\tVariables allowed only for Chainbuild:')
+    print('\t\tUff: Internal energy for fluid-fluid interactions in K (J/kb).')
+    print('\t\tUsf: Internal energy for solid-fluid interactions in K (J/kb).')
+    print('\t\tMu: Excess Chemical Potential in K (J/kb) by Widom insertion method.')
+    print('\t\t\tIf the ensemble is Grand Canonical, it will extract the given chemical potentials.')
+    print('\t\tRho: Density in A^-3.')
     print('Example:')
-    print('\tThe following command would extract the volume and internal energy of a methane-benzene binary mixture from Output/System_1,')
+    print('\tThe following command would extract the volume and internal energy of a methane-benzene binary mixture from Output/System_1 from RASPA,')
     print('\tas well as the pressure (in atm) and the box-length in the x direction.')
     print('\tThe extracted data would be saved in the file excessProps.dat')
-    print('\tpython3 extractRaspaData.py -I Outputs/System_1/ -o ./excessProps.dat -t prod -C methane benzene -v U V P L -U atm -d x -p -s P')
+    print('\tpython3 extractData.py -m Raspa -I Outputs/System_1/ -o ./excessProps.dat -t prod -v U V P L -U atm -d x -p -s P')
+    print('\tThe following command would extract the volume, number of molecules and fluid-fluid internal energy of nitrogen both from Chainbuild.')
+    print('\tThe extracted data would be saved in the file outData.dat, and sorted according to the number of molecules.')
+    print('\tpython3 extractData.py -m Chainbuild -I ./ -o ./outData.dat -v V N Uff -p -s N')
     exit(1)
-
 ##########################################################################################################
 if __name__ == '__main__':
     print('Author: Santiago A. Flores Roman')
@@ -561,8 +755,8 @@ if __name__ == '__main__':
             print('RASPA'); extract = Raspa()
         elif motor == 'chainbuild': 
             print('Chainbuild'); extract = Chainbuild()
-        else: print(f'Error: Simulation program not known: {motor}. Exiting.'); exit(1)
-    else: print('Error: None simulation program found. Exiting.'); exit(1)
+        else: print(f'Error: Simulation program not known: {motor}. Exiting.'); exit(2)
+    else: print('Error: None simulation program found. Exiting.'); exit(2)
     print('\nReading input parameters...')
     extract.Flags()
     print('\nReading input files...')
