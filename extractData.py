@@ -24,7 +24,9 @@ class Extract():
         self.sort = 'P'
         self.sections = ['init','prod']
         self.dimensions = ['x','y','z']
-        self.varsToExtract = ['Rho','P']
+        self.varsToExtract = ['N']
+        self.histsToExtract = []
+        self.termalizationInPlots, self.termalizationInHists = 0, 0
         self.components, self.listInFiles, self.outFilePath = [], [], []
         self.outFile = ('outData.dat',False)
         self.printInputParams = self.createFigures = False
@@ -41,7 +43,10 @@ class Extract():
         dimensions = self.dimensions
         components = self.components
         varsToExtract = self.varsToExtract
+        histsToExtract = self.histsToExtract
         sections = self.sections
+        termalizationInPlots = self.termalizationInPlots
+        termalizationInHists = self.termalizationInHists
         motor = self.motor
         for i in range(len(argv)):
             argv[i] = argv[i].lower()
@@ -53,6 +58,8 @@ class Extract():
             elif (argv[i] == '-s'): sort = argv[i+1]
             elif (argv[i] == '-o'): outFile = (argv[i+1],True)
             elif (argv[i] == '-m'): motor = argv[i+1]
+            elif (argv[i] == '-ef'): termalizationInPlots = int(float(argv[i+1]))
+            elif (argv[i] == '-eh'): termalizationInHists = int(float(argv[i+1]))
             elif (argv[i] == '-d'): 
                 dimensions = []
                 for j in range(i+1,len(argv)):
@@ -72,6 +79,11 @@ class Extract():
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
                     sections.append(argv[j])
+            elif (argv[i] == '-g'): 
+                histsToExtract = []
+                for j in range(i+1,len(argv)):
+                    if (argv[j][0] == '-'): break
+                    histsToExtract.append(argv[j].lower())
         self.printInputParams = printInputParams
         self.createFigures = createFigures
         self.path = path
@@ -81,7 +93,10 @@ class Extract():
         self.dimensions = dimensions
         self.components = components
         self.varsToExtract = varsToExtract
+        self.histsToExtract = histsToExtract
         self.sections = sections
+        self.termalizationInPlots = termalizationInPlots
+        self.termalizationInHists = termalizationInHists
     def CreateDataFrame(self,outData):
         dimensions = self.dimensions
         sort = self.sort
@@ -111,8 +126,9 @@ class Extract():
         self.outFilePath = outFilePath
         return outFilePath
     def PlotVariables(self,outData,fileNumber):
+        term = self.termalizationInPlots
         outPath,outFileName,outExtension = self.outFilePath
-        outData.plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+        outData[term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
         plt.tight_layout()
         if outPath: outPath += 'Figures/' #If output file is in a subdirectory.
         else: outPath = 'Figures/' #If output file is not in a subdirectory.
@@ -121,6 +137,7 @@ class Extract():
     def ExtractData(self):
         listInFiles = self.listInFiles
         path = self.path
+        histsToExtract = self.histsToExtract
         createFigures = self.createFigures
         outFileName, createOutFile = self.outFile
         for i in range(len(listInFiles)):
@@ -145,6 +162,17 @@ class Extract():
                     _ = self.ReadOutputFile()
                     print('\nCreating figures...')
                     self.PlotVariables(outData,i)
+            if histsToExtract:
+                outPath, outFileName, outExtension = self.ReadOutputFile()
+                print(f'\nCreating histograms...')
+                if outPath:
+                    for j in histsToExtract: 
+                        self.PlotHistograms(outData,i,j)
+                        print(f'\t{outPath}histograms/{i}_{outFileName}_{j.upper()} ...')
+                else: 
+                    for j in histsToExtract: 
+                        self.PlotHistograms(outData,i,j)
+                        print(f'\thistograms/{i}_{outFileName}_{j.upper()} ...')
             print(f'\nNormal termination for file {listInFiles[i]}')
         print(f'\nNormal termination.')
         exit(0)
@@ -442,6 +470,80 @@ class Raspa(Extract):
             print('Warning: None excess chemical potential was found from RASPA.'); chemPots.append(np.nan)
         if (len(chemPots) == 0): deltaChemPots.append(np.nan)
         return pd.Series(chemPots,index=range(len(chemPots))),pd.Series(deltaChemPots,index=range(len(deltaChemPots)))
+    def PlotHistograms(self,outData,fileNumber,variable):
+        term = self.termalizationInHists
+        components = self.components
+        dimensions = self.dimensions
+        units = self.units
+        outPath,outFileName,outExtension = self.outFilePath
+        if outPath: outPath += 'histograms/' #If output file is in a subdirectory.
+        else: outPath = 'histograms/' #If output file is not in a subdirectory.
+        os.makedirs(outPath, exist_ok=True)
+        if ('v' == variable): 
+            plt.figure()
+            outData['V[A^3]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel('V[A^3]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_V.pdf')
+        if ('t' == variable): 
+            plt.figure()
+            outData['T[K]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel('T[K]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_T.pdf')
+        if ('p' == variable): 
+            plt.figure()
+            outData[f'P[{units}]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel(f'P[{units}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_P.pdf')
+        if ('u' == variable): 
+            plt.figure()
+            outData['U[K]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel('U[K]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_U.pdf')
+        if ('mu' == variable): 
+            for comp in components: 
+                plt.figure()
+                outData['Mu[K]'][term:].plot(bins=50,kind='hist')
+                plt.xlabel('Mu[K]')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Mu_{comp}.pdf')
+        if ('idmu' == variable): 
+            for comp in components: 
+                plt.figure()
+                outData[f'IdMu[K] {comp}'][term:].plot(bins=50,kind='hist')
+                plt.xlabel(f'IdMu[K] {comp}')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_IdMu_{comp}.pdf')
+        if ('exmu' == variable): 
+            for comp in components: 
+                plt.figure()
+                outData[f'ExMu[K] {comp}'][term:].plot(bins=50,kind='hist')
+                plt.xlabel(f'ExMu[K] {comp}')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_ExMu_{comp}.pdf')
+        if ('rho' == variable): 
+            for comp in components: 
+                plt.figure()
+                outData[f'Rho[kg/mol] {comp}'][term:].plot(bins=50,kind='hist')
+                plt.xlabel(f'Rho[kg/mol] {comp}')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Rho_{comp}.pdf')
+        if ('n' == variable): 
+            for comp in components: 
+                plt.figure()
+                outData[f'N {comp}'][term:].plot(bins=50,kind='hist')
+                plt.xlabel(f'N {comp}')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_N_{comp}.pdf')
+        if ('l' == variable): 
+            for dim in dimensions: 
+                plt.figure()
+                outData[f'Box-L[A] {dim}'][term:].plot(bins=50,kind='hist')
+                plt.xlabel(f'Box-L[A] {dim}')
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_L_{dim}.pdf')
 class Chainbuild(Extract):
     def __init__(self): 
         Extract.__init__(self,argv)
@@ -670,7 +772,7 @@ class Chainbuild(Extract):
                 if findEnsemble.group(1) == 'nvt':
                     print('Ensemble is \"NVT\". Density is not given, but you can calculate it manually.')
                     density.append(np.nan)
-                elif findNMolecules.group(1) == 'gce':
+                elif findEnsemble.group(1) == 'gce':
                     print('Ensemble is \"GCE\". Reading density from log file.')
                     print('Warning: Density is not calculated by Chainbuild during simulation.')
                     print('Final density will be extracted.')
@@ -682,6 +784,68 @@ class Chainbuild(Extract):
                         print('Warning: Density was not found from Chainbuild'); density.append(np.nan)
                 break
         return pd.Series(density,index=range(len(density)))/sigma**3 #Angstrom^-3
+    def PlotHistograms(self,outData,fileNumber,variable):
+        term = self.termalizationInHists
+        dimensions = self.dimensions
+        outPath,outFileName,outExtension = self.outFilePath
+        if outPath: outPath += 'histograms/' #If output file is in a subdirectory.
+        else: outPath = 'histograms/' #If output file is not in a subdirectory.
+        os.makedirs(outPath, exist_ok=True)
+        if ('v' == variable): 
+            plt.figure()
+            outData['V[A^3]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel('V[A^3][K]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_V.pdf')
+        if ('t' == variable): 
+            plt.figure()
+            outData['T[K]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel('T[K]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_T.pdf')
+        if ('uff' == variable): 
+            plt.figure()
+            outData['Uff[K]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel('Uff[K]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Uff.pdf')
+        if ('usf' == variable): 
+            plt.figure()
+            outData['Usf[K]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel('Usf[K]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Usf.pdf')
+        if ('idmu' == variable): 
+            plt.figure()
+            outData['IdMu[K]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel('IdMu[K]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_IdMu.pdf')
+        if ('mu' == variable): 
+            plt.figure()
+            outData['Mu[K]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel('Mu[K]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Mu.pdf')
+        if ('rho' == variable): 
+            plt.figure()
+            outData['Rho[A^-3]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel('$\\rho [A^{-3}]$')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Rho.pdf')
+        if ('n' == variable): 
+            plt.figure()
+            outData['N'][term:].plot(bins=50,kind='hist')
+            plt.xlabel('N')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_N.pdf')
+        if ('l' == variable): 
+            for dim in dimensions: 
+                plt.figure()
+                outData[f'Box-L[A] {dim}'][term:].plot(bins=50,kind='hist')
+                plt.xlabel(f'Box-L[A] {dim}')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_L_{dim}.pdf')
 class SummarizeDataFrames():
     def __init__(self,dataFilesPath,groups,sort,joinDataFrames,countFrom):
         self.dataFilesPath = dataFilesPath
@@ -759,6 +923,7 @@ def Help():
     print('\t\t-s or -S: Sort data frame according to a given value. By default, it\'s pressure (P).')
     print('\t\t\tIt can be sorted according to only one value, which must be one of the variables given after the flag -v (or -V).')
     print('\t\t-f or -F: Plot the evolution of variables along the cycles.')
+    print('\t\t-ef or -EF: Indicate termalization for the plots mentioned above (initial point to analyze the data).')
     print('\t\t\tThe plot file will be outputFile.pdf, where outputFile is indicated by the -o flag.')
     print('\t\t-p or -P: Print input parameters.')
     print('\t\t-i or -I: Indicate the path where the data file is found. By default: Output/System_0')
@@ -766,9 +931,11 @@ def Help():
     print('\t\t\tIf you have several files in the input path given, this script will extract them all and enumerate them as i_fileName, where i is an integer number.')
     print('\t\t\tBy default (if you don\'t set output path), no file is created.')
     print('\t\t-d or -D: List of dimensions to extract the box-lengths. By deafault, the three dimensions.')
-    print('\t\t-v or -V: Indicate the list of variables that will be extracted from the RASPA\'s data files (per cycle). By default: Rho and P.')
+    print('\t\t-v or -V: Indicate the list of variables that will be extracted. By default: N.')
+    print('\t\t-g or -G: Indicate the list of variables that will be extracted to plot their respective histograms. By default: N.')
+    print('\t\t-eh or -EH: Indicate termalization for histograms (initial point to analyze the data).')
     print('\tFlags allowed only for RASPA:')
-    print('\t\t-t or -T: The types of cycles to analyze: Production cycles (prod) or initialization cycles (init). By default: prod')
+    print('\t\t-t or -T: The types of cycles to analyze: Production cycles (prod) or initialization cycles (init). By default: init and prod')
     print('\t\t-u or -U: Indicate the units for the pressure (kPa, atm or bar). By default: kPa')
     print('\tVariables allowed for RASPA and Chainbuild:')
     print('\t\tV: Volume in A^3.')
