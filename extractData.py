@@ -547,16 +547,17 @@ class Raspa(Extract):
 class Chainbuild(Extract):
     def __init__(self): 
         Extract.__init__(self,argv)
-        self.listLogFiles = []
+        self.listLogFiles, self.listNLogFiles = [], []
         self.solidFileName = ''
         self.molFileName = ''
         self.sigma_ff = self.epsilon_ff = 0
     def ReadInputFiles(self):
         path = self.path
-        listInputFiles, listLogFiles = [], []
+        listInputFiles, listLogFiles, listNLogFiles = [], [], []
         molFileFound = False 
         for fileName in os.listdir(path):
             if fileName.endswith('.inp'): listInputFiles.append(fileName)
+            elif fileName.endswith('.nlog'): listNLogFiles.append(fileName)
             elif fileName.endswith('.log'): listLogFiles.append(fileName)
             elif fileName.endswith('.sol'): self.solidFileName = fileName 
             elif fileName.endswith('.mol'): 
@@ -566,6 +567,7 @@ class Chainbuild(Extract):
         if not molFileFound: print('Error: Molecule file not found. Exiting.'); exit(2)
         listInputFiles.sort(); listLogFiles.sort()
         self.listInFiles = listInputFiles
+        self.listNLogFiles = listNLogFiles
         self.listLogFiles = listLogFiles
     def ExtractLennardJonesParameters(self,molFileName):
         with open(molFileName,'r') as molFile: molFileLines = molFile.readlines()
@@ -601,11 +603,16 @@ class Chainbuild(Extract):
         units = self.units
         sections = self.sections
         listLogFiles = self.listLogFiles
-        logFileName = ''
-        for logFile in listLogFiles:
+        listNLogFiles = self.listNLogFiles
+        logFileName, nLogFileName = '', ''
+        for logFile in listLogFiles: # Look for the log file related to the input file.
             if logFile[:-4] == inputFileName[:-4]: 
                 logFileName = logFile; break
         if not logFileName: print(f'Log file {inputFileName[:-4]}.log not found. Exiting.'); exit(2)
+        for nLogFile in listNLogFiles: # Look for the log file related to the input file.
+            if nLogFile[:-5] == inputFileName[:-4]: 
+                nLogFileName = nLogFile; break
+        if not nLogFileName: print(f'nlog file {inputFileName[:-4]}.nlog not found. Exiting.'); exit(2)
         outData = {}
         if ('v' in varsToExtract): outData['V[A^3]'] = self.ExtractVolumes(inputFileName)
         if ('t' in varsToExtract): outData['T[K]'] = self.ExtractTemperatures(inputFileName)
@@ -614,7 +621,7 @@ class Chainbuild(Extract):
         if ('idmu' in varsToExtract): outData['IdMu[K]'] = self.ExtractIdealWidomChemicalPotential(logFileName)
         if ('mu' in varsToExtract): outData['Mu[K]'] = self.ExtractChemicalPotential(inputFileName,logFileName)
         if ('rho' in varsToExtract): outData['Rho[A^-3]'] = self.ExtractDensities(inputFileName,logFileName)
-        if ('n' in varsToExtract): outData['N'] = self.ExtractNumberOfMolecules(inputFileName,logFileName)
+        if ('n' in varsToExtract): outData['N'] = self.ExtractNumberOfMolecules(inputFileName,nLogFileName)
         if ('l' in varsToExtract): 
             for dim in dimensions:
                 outData['Box-L[A]'+f' {dim}'] = self.ExtractBoxLengths(inputFileName,dim)
@@ -628,7 +635,7 @@ class Chainbuild(Extract):
             findEnsemble = re.search(f'ens\s+(\w+)\s+?(-?\d+\.?\d*)',fileLines[line])
             if findEnsemble: 
                 if findEnsemble.group(1) == 'gce':
-                    print('Ensemble is \"GCE\". Reading chemical potentials input file.')
+                    print('Ensemble is \"GCE\". Reading chemical potentials from input file.')
                     chemPots.append(float(findEnsemble.group(2)))
                 elif findEnsemble.group(1) == 'nvt':
                     print('Ensemble is \"NVT\". Reading excess chemical potentials from log file.')
@@ -677,7 +684,7 @@ class Chainbuild(Extract):
         if (len(energies) == 0): 
             print('Warning: No solid-fluid energy was not found from Chainbuild.'); energies.append(np.nan)
         return pd.Series(energies,index=range(len(energies)))*epsilon #K
-    def ExtractNumberOfMolecules(self,inputFileName,logFileName):
+    def ExtractNumberOfMolecules(self,inputFileName,nLogFileName):
         path = self.path
         nMolecules = []
         with open(path+inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
@@ -688,11 +695,9 @@ class Chainbuild(Extract):
                     print('Ensemble is \"NVT\". Reading number of molecules from input file.')
                     nMolecules.append(float(findNMolecules.group(2)))
                 elif findNMolecules.group(1) == 'gce':
-                    print('Ensemble is \"GCE\". Reading number of molecules from log file.')
-                    with open(path+logFileName,'r') as logFile: fileLines = logFile.readlines()
-                    for line in range(len(fileLines)):
-                        findNMolecules = re.search(f'N=\s+(\d+\.?\d*\w?[-+]?\d*)',fileLines[line])
-                        if findNMolecules: nMolecules.append(float(findNMolecules.group(1)))
+                    print('Ensemble is \"GCE\". Reading number of molecules from nlog file.')
+                    fileContent = np.loadtxt(path+nLogFileName,dtype='object')
+                    nMolecules = list(map(int,fileContent[:,1]))
                 break
         if (len(nMolecules) == 0): 
             print('Warning: Number of molecules was not found from Chainbuild'); nMolecules.append(np.nan)
