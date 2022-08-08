@@ -851,52 +851,6 @@ class CP2K(Extract):
         Extract.__init__(self,argv)
         self.listxyzFiles, self.listOutFiles = [], []
         self.inpFileName, self.enerFileName = '', ''
-        self.varsToExtract = ['t']
-        self.sort = 't'
-        self.method = ''
-    def Flags(self):
-        argv = self.argv
-        printInputParams = self.printInputParams
-        createFigures = self.createFigures
-        path = self.path
-        sort = self.sort
-        outFile = self.outFile
-        varsToExtract = self.varsToExtract
-        histsToExtract = self.histsToExtract
-        termalizationInPlots = self.termalizationInPlots
-        termalizationInHists = self.termalizationInHists
-        motor = self.motor
-        method = self.method
-        for i in range(len(argv)):
-            argv[i] = argv[i].lower()
-            if (argv[i] == '-h'): self.Help()
-            elif (argv[i] == '-p'): printInputParams = True
-            elif (argv[i] == '-f'): createFigures = True
-            elif (argv[i] == '-i'): path = argv[i+1]
-            elif (argv[i] == '-s'): sort = argv[i+1]
-            elif (argv[i] == '-o'): outFile = (argv[i+1],True)
-            elif (argv[i] == '-m'): motor = argv[i+1]
-            elif (argv[i] == '-ef'): termalizationInPlots = int(float(argv[i+1]))
-            elif (argv[i] == '-eh'): termalizationInHists = int(float(argv[i+1]))
-            elif (argv[i] == '-v'): 
-                varsToExtract = []
-                for j in range(i+1,len(argv)):
-                    if (argv[j][0] == '-'): break
-                    varsToExtract.append(argv[j].lower())
-            elif (argv[i] == '-g'): 
-                histsToExtract = []
-                for j in range(i+1,len(argv)):
-                    if (argv[j][0] == '-'): break
-                    histsToExtract.append(argv[j].lower())
-        self.printInputParams = printInputParams
-        self.createFigures = createFigures
-        self.path = path
-        self.sort = sort
-        self.outFile = outFile
-        self.varsToExtract = varsToExtract
-        self.histsToExtract = histsToExtract
-        self.termalizationInPlots = termalizationInPlots
-        self.termalizationInHists = termalizationInHists
     def ReadInputFiles(self):
         path = self.path
         listxyzFiles, listOutFiles = [], []
@@ -909,10 +863,44 @@ class CP2K(Extract):
                 inpFileName = fileName; inpFileFound = True 
             elif fileName.endswith('.ener'): 
                 enerFileName = fileName; enerFileFound = True 
-        if not inpFileFound: print('Error: Input file not found. Exiting.'); exit(2)
+        if not inpFileFound: print('Error: Inp file not found. Exiting.'); exit(2)
         listxyzFiles.sort(); listOutFiles.sort()
         self.listxyzFiles, self.listOutFiles = listxyzFiles, listOutFiles
         self.inpFileName, self.enerFileName = inpFileName, enerFileName
+    def CreateOutFile(self,outData):
+        outPath, outFileName, outExtension = self.outFilePath
+        if outPath: outPath = f'{outPath}dataFiles/' #If output file is in a subdirectory.
+        else: outPath = 'dataFiles/' #If output file is not in a subdirectory.
+        os.makedirs(outPath, exist_ok=True)
+        outData.to_csv(f'{outPath}{outFileName}{outExtension}',sep='\t',index=False,na_rep='NaN')
+    def PlotVariables(self,outData): #Check!
+        term = self.termalizationInPlots
+        outPath,outFileName,outExtension = self.outFilePath
+        outData[term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+        plt.tight_layout()
+        if outPath: outPath += 'Figures/' #If output file is in a subdirectory.
+        else: outPath = 'Figures/' #If output file is not in a subdirectory.
+        os.makedirs(outPath, exist_ok=True)
+        plt.savefig(f'{outPath}{outFileName}.pdf')
+class NEBMethod(CP2K):
+    def __init__(self):
+        CP2K.__init__(self)
+        self.stepSize = 0
+        self.projectName, self.mainOutFileName = '', ''
+        self.atomLabels = ['1-2']
+        self.varsToExtract = ['t']
+        self.sort = 't'
+    def Flags(self):
+        Extract.Flags(self)
+        atomLabels = []
+        for i in range(len(argv)):
+            argv[i] = argv[i].lower()
+            if (argv[i] == '-d'): 
+                atomLabels = []
+                for j in range(i+1,len(argv)):
+                    if (argv[j][0] == '-'): break
+                    atomLabels.append(argv[j].lower())
+        self.atomLabels = atomLabels
     def PrintInputParameters(self):
         path = self.path
         varsToExtract = self.varsToExtract
@@ -936,57 +924,149 @@ class CP2K(Extract):
         print(f'\tList of xyz files:')
         for i in range(len(listxyzFiles)):
             print(f'\t\t{listxyzFiles[i]}')
-    # def ExtractEnergies(self)
-    # def CallExtractors(self):
-class NEBMethod(CP2K):
-    def __init__(self):
-        CP2K.__init__(self)
-        self.stepSize, self.numOfReplicas = 0, 0
-    # def CallExtractors():
-    def ExtractStepSize(self):
-        path = self.path
-        inpFileName = self.inpFileName
-        listOutFiles = self.listOutFiles
-        outFileName = ''
-        stepSize = 0
-        for fileName in listOutFiles:
-            if fileName[:-4] == inpFileName[:-4]: 
-                outFileName = fileName; break
-        with open(path+outFileName,'r') as outFile: fileLines = outFile.readlines()
-        for line in fileLines:
-            findStepSize = re.search(r'step_size\s+(\d+\.?\d*\w?-?\d*)',line,re.I)
-            if findStepSize: stepSize = float(findStepSize.group(1))
-        if not stepSize: print('Step size not found. Exiting.'); exit(2)
-    # def CalculateFES(self):
-    def ExtractData(self): 
+    def CallExtractors(self):
+        varsToExtract = self.varsToExtract
         listxyzFiles = self.listxyzFiles
-        self.ExtractDistances(listxyzFiles[-1],['1-2','1-15'])
-        print('End of trial')
-    def ExtractNumOfReplicas(self):
+        listOutFiles = self.listOutFiles
         inpFileName = self.inpFileName
-        with open(inpFileName,'r') as inpFile: fileLines = inpFileName.readlines()
-        for line in fileLines:
-            findNumOfReplicas = re.search(r'NUMBER_OF_REPLICA\s+(\d+)',line,re.I)
-            if findNumOfReplicas:
-                numOfReplicas = float(findNumOfReplicas.group(1)); break
-        self.numOfReplicas = numOfReplicas
-    def ExtractDistances(self,xyzFileName,atomLabels):
+        atomLabels = self.atomLabels
+        mainOutFileName, projectName= '', ''
+        sublistxyzFiles = listxyzFiles.copy()
+        numOfReplicas = self.ExtractNumberOfReplicas()
+        for outFile in listOutFiles:
+            if outFile[:-4] == inpFileName[:-4]: 
+                mainOutFileName = outFile; break
+        if not mainOutFileName: print(f'Main out file {inputFileName[:-4]}.out not found. Exiting.'); exit(2)
+        self.mainOutFileName = mainOutFileName
+        for xyzFileName in listxyzFiles:
+            if not re.search(f'Replica',xyzFileName): sublistxyzFiles.remove(xyzFileName)
+        listxyzFiles = sublistxyzFiles
+        outData = {}
+        if ('t' in varsToExtract): outData['t[fs]'] = self.ExtractTime()
+        if ('da' in varsToExtract):
+            for pairOfAtoms in atomLabels:
+                for xyzFileName in listxyzFiles:
+                    replica = int(re.sub(r'.+Replica[a-zA-Z_]+(\d+).+',r'\1',xyzFileName))
+                    outData[f'D[A] [{pairOfAtoms}] {replica}'] = self.ExtractDistsBtwnAtoms(xyzFileName,pairOfAtoms)
+        if ('dr' in varsToExtract):
+            for replica in range(numOfReplicas-1):
+                pairOfReplicas = f'[{replica+1}-{replica+2}]'
+                outData[f'D[A] {pairOfReplicas}'] = self.ExtractDistsBtwnReplicas(replica)
+        if ('er' in varsToExtract):
+            for replica in range(numOfReplicas):
+                outData[f'E[Hartree] {replica+1}'] = self.ExtractEnergiesOfNthReplica(replica)
+        return outData
+    def ExtractNumberOfReplicas(self):
         path = self.path
-        stepSize = self.stepSize
-        numOfReplicas = self.numOfReplicas
+        inpFileName = self.inpFileName
+        with open(path+inpFileName,'r') as inpFile: fileLines = inpFile.readlines()
+        for line in fileLines:
+            findNumOfReplicas = re.search(r'NUMBER_OF_REPLICA\s+(\d+)',line)
+            if findNumOfReplicas: numOfReplicas = int(findNumOfReplicas.group(1))
+        return numOfReplicas
+    def ExtractDistsBtwnAtoms(self,xyzFileName,pairOfAtoms):
+        path = self.path
         Distance = lambda pos1,pos2: np.sqrt(np.dot(pos1-pos2,pos1-pos2))
         with open(path+xyzFileName,'r') as xyzFile: fileLines = xyzFile.readlines()
         nAtoms = int(fileLines[0])
-        distances = {f'd[A]:{i}':[] for i in atomLabels}
-        for i in atomLabels:
-            couple = re.split('-',i)
-            for line in range(1,len(fileLines),nAtoms+2):
-                atom1 = fileLines[line+int(couple[0])].split()
-                atom2 = fileLines[line+int(couple[1])].split()
-                pos1 = np.array(atom1[1:],dtype='float')
-                pos2 = np.array(atom2[1:],dtype='float')
-                distances[f'd[A]:{i}'].append(Distance(pos1,pos2))
-        return pd.DataFrame(distances)
+        labels = re.split('-',pairOfAtoms)
+        distances = []
+        for line in range(1,len(fileLines),nAtoms+2):
+            atom1 = fileLines[line+int(labels[0])].split()
+            atom2 = fileLines[line+int(labels[1])].split()
+            pos1 = np.array(atom1[1:],dtype='float')
+            pos2 = np.array(atom2[1:],dtype='float')
+            distances.append(Distance(pos1,pos2))
+        return pd.Series(distances)
+    def ExtractTime(self):
+        path = self.path
+        mainOutFileName = self.mainOutFileName
+        stepSize, maxNStep = 0, 0
+        with open(path+mainOutFileName,'r') as mainOutFile: fileLines = mainOutFile.readlines()
+        for line in fileLines:
+            findStepSize = re.search(r'step_size\s+(\d+\.?\d*\w?-?\d*)',line)
+            if findStepSize: stepSize = float(findStepSize.group(1))
+        for line in fileLines[::-1]:
+            findMaxNStep = re.search(r'STEP NUMBER\s+=\s+(\d+)',line)
+            if findMaxNStep: 
+                maxNStep = int(findMaxNStep.group(1))+1; break
+        if not stepSize: print('Step size not found. Exiting.'); exit(2)
+        if not maxNStep: print('Maximum number of steps not found. Exiting.'); exit(2)
+        time = np.linspace(stepSize,maxNStep*stepSize,maxNStep)
+        return pd.Series(time)
+    def ExtractDistsBtwnReplicas(self,replica):
+        path = self.path
+        mainOutFileName = self.mainOutFileName
+        distances = []
+        with open(path+mainOutFileName,'r') as mainOutFile: fileLines = mainOutFile.readlines()
+        for line in range(len(fileLines)):
+            findDistancesRep = re.search('DISTANCES REP',fileLines[line])
+            if findDistancesRep: 
+                tempList = []
+                for subline in range(line,len(fileLines)):
+                    if re.search('ENERGIES',fileLines[subline]): break
+                    if subline == line: tempList += fileLines[subline].split()[3:]
+                    else: tempList += fileLines[subline].split()
+                tempList = list(map(float,tempList))
+                distances.append(tempList[replica])
+        return pd.Series(distances)
+    def ExtractEnergiesOfNthReplica(self,replica):
+        path = self.path
+        mainOutFileName = self.mainOutFileName
+        energies = []
+        with open(path+mainOutFileName,'r') as mainOutFile: fileLines = mainOutFile.readlines()
+        for line in range(len(fileLines)):
+            findEnergies = re.search('ENERGIES \[au\]',fileLines[line])
+            if findEnergies: 
+                tempList = []
+                for subline in range(line,len(fileLines)):
+                    if re.search('BAND TOTAL ENERGY',fileLines[subline]): break
+                    if subline == line: tempList += fileLines[subline].split()[3:]
+                    else: tempList += fileLines[subline].split()
+                tempList = list(map(float,tempList))
+                energies.append(tempList[replica])
+        return pd.Series(energies)
+    def ExtractData(self): 
+        path = self.path
+        listInFiles = self.listInFiles
+        listxyzFiles = self.listxyzFiles
+        listOutFiles = self.listOutFiles
+        histsToExtract = self.histsToExtract
+        createFigures = self.createFigures
+        outFileName, createOutFile = self.outFile
+        print('\nExtracting data...')
+        outData = self.CallExtractors()
+        print('\nOrganizing data...')
+        outData = self.CreateDataFrame(outData)
+        print(outData)
+        print(outData.describe())
+        if createOutFile:
+            outPath, outFileName, outExtension = self.ReadOutputFile()
+            if outPath:
+                print(f'\nCreating output file: {outPath}dataFiles/{outFileName}{outExtension} ...')
+            else: 
+                print(f'\nCreating output file: dataFiles/{outFileName}{outExtension} ...')
+            self.CreateOutFile(outData)
+            if createFigures: 
+                print('\nCreating figures...')
+                self.PlotVariables(outData)
+        else:
+            if createFigures: 
+                _ = self.ReadOutputFile()
+                print('\nCreating figures...')
+                self.PlotVariables(outData)
+        if histsToExtract:
+            outPath, outFileName, outExtension = self.ReadOutputFile()
+            print(f'\nCreating histograms...')
+            if outPath:
+                for j in histsToExtract: 
+                    self.PlotHistograms(outData,j)
+                    print(f'\t{outPath}histograms/{outFileName}_{j.upper()} ...')
+            else: 
+                for j in histsToExtract: 
+                    self.PlotHistograms(outData,j)
+                    print(f'\thistograms/{outFileName}_{j.upper()} ...')
+        print(f'\nNormal termination.'); exit(0)
 class SummarizeDataFrames():
     def __init__(self,dataFilesPath,groups,sort,joinDataFrames,countFrom):
         self.dataFilesPath = dataFilesPath
@@ -1133,7 +1213,7 @@ if __name__ == '__main__':
     if re.search(r'-h+',argvString.lower()): Help()
     print(f'\nChecking simulation program...')
     extract = 0
-    checkMotor = re.search(r'-m\s+(\w+)\s+',argvString.lower())
+    checkMotor = re.search(r'-m\s+(\w+)/?(\w*)\s*',argvString.lower())
     if checkMotor:
         motor = checkMotor.group(1)
         if motor == 'raspa': 
@@ -1141,11 +1221,9 @@ if __name__ == '__main__':
         elif motor == 'chainbuild': 
             print('Chainbuild'); extract = Chainbuild()
         elif motor == 'cp2k':
-            findMethod = re.search(r'-mthd\s+(\w+)\s+',argvString.lower())
-            if findMethod:
-                method = findMethod.group(1)
-                if method == 'neb':
-                    print('CP2K/NEB'); extract = NEBMethod()
+            method = checkMotor.group(2)
+            if method == 'neb':
+                print('CP2K/NEB'); extract = NEBMethod()
             else: print('CP2K'); extract = CP2K()
         else: print(f'Error: Simulation program not known: {motor}. Exiting.'); exit(2)
     else: print('Error: No simulation program found. Exiting.'); exit(2)
