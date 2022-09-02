@@ -846,6 +846,127 @@ class Chainbuild(Extract):
                 plt.xlabel(f'Box-L[A] {dim}')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_L_{dim}.pdf')
+class GOMC(Extract):
+    def __init__(self): 
+        Extract.__init__(self,argv)
+        self.listLogFiles = []
+        self.sections = ['prod']
+        self.Box0DataFrameColumn, self.Box1DataFrameColumn = [], []
+        self.Box0DataFrameContent, self.Box1DataFrameContent = [], []
+    def FindComponents(self,logFileName):
+        with open(logFileName,'r') as logFile: fileLines = logFile.readlines()
+        for line in range(len(fileLines)):
+            findComponent = re.search('Molecule Kind:\s+(.+?)',fileLines[line])
+            if findComponent: 
+                if findComponent.group(1) in self.components: break
+                self.components.append(findComponent.group(1))
+    def ReadInputFiles(self):
+        path = self.path
+        listLogFiles = []
+        logFileFound = False 
+        for fileName in os.listdir(path):
+            if fileName.endswith('.log'): 
+                listLogFiles.append(fileName)
+                logFileFound = True
+        if not logFileFound: print('Error: Log file not found. Exiting.'); exit(2)
+        listLogFiles.sort()
+        self.listLogFiles = listLogFiles
+        self.FindComponents(path+listLogFiles[0])
+    def PrintInputParameters(self):
+        path = self.path
+        varsToExtract = self.varsToExtract
+        sort = self.sort
+        dimensions = self.dimensions
+        createFigures = self.createFigures
+        outFileName, createOutFile = self.outFile
+        listInFiles = self.listInFiles
+        components = self.components
+        print(f'\tInput path: {path}')
+        print(f'\tVariables to extract: {varsToExtract}')
+        print(f'\tFluid components: {components}')
+        print(f'\tSort variables according to: {sort}')
+        print(f'\tSections to analyze: {sections}')
+        print(f'\tBox dimensions: {dimensions}')
+        print(f'\tCreate figures: {createFigures}')
+        print(f'\tCreate output file: {createOutFile}')
+        print(f'\tInput files:')
+        for i in range(len(listInFiles)): print(f'\t\t{listInFiles[i]}')
+    def CreateDataFrameColumns(self,fileName):
+        path = self.path
+        sections = self.sections
+        Box0DataFrameColumn, Box1DataFrameColumn = [], []
+        eTitleColumn, sTitleColumn = [], []
+        foundETitle = foundSTitle = False, False
+        with open(path+fileName,'r') as fileContent: fileLines = fileContent.readlines()
+        for line in range(len(fileLines)):
+            findETitle = re.search('ETITLE:\s+(.+)')
+            findSTitle = re.search('STITLE:\s+STEP\s+(.+)')
+            if findETitle and not foundETitle: 
+                eTitleColumn = findETitle.group(1).split()
+                foundETitle = True
+            elif findSTitle and not foundSTitle: 
+                sTitleColumn = findSTitle.group(1).split()
+                foundSTitle = True
+            if foundETitle and foundSTitle: break
+        Box0DataFrameColumn = eTitleColumn + sTitleColumn
+        Box1DataFrameColumn = eTitleColumn + sTitleColumn
+        self.Box0DataFrameColumn = Box0DataFrameColumn
+        self.Box1DataFrameColumn = Box1DataFrameColumn
+    def CreateDataFrameContent(self,fileName):
+        path = self.path
+        Box0DataFrameContent, Box1DataFrameContent = [], []
+        enerBox0, enerBox1, statBox0, statBox1 = [], [], [], []
+        foundEnerBox0Line, foundEnerBox1Line = False, False
+        foundStatBox0Line, foundStatBox1Line = False, False
+        with open(path+fileName,'r') as fileContent: fileLines = fileContent.readlines()
+        for line in range(len(fileLines)):
+            findEnerBox0 = re.search('ENER_0:\s+(.+)')
+            findStatBox0 = re.search('STAT_0:\s+\d+\s+(.+)')
+            findEnerBox1 = re.search('ENER_1:\s+(.+)')
+            findStatBox1 = re.search('STAT_1:\s+\d+\s+(.+)')
+            if findEnerBox0 and not foundEnerBox0Line: 
+                enerBox0 = findEnerBox0.group(1).split()
+                foundEnerBox0Line = True
+            elif findStatBox0 and not foundStatBox0Line:
+                statBox0 = findEnerBox0.group(1).split()
+                foundStatBox0Line = True
+            elif findEnerBox1 and not foundEnerBox1Line: 
+                enerBox1 = findEnerBox1.group(1).split()
+                foundEnerBox1Line = True
+            elif findStatBox1 and not foundStatBox1Line: 
+                statBox1 = findEnerBox1.group(1).split()
+                foundStatBox1Line = True
+            if foundEnerBox0Line and foundStatBox0Line:
+                Box0DataFrameContent.append(enerBox0+statBox0)
+                foundEnerBox0Line, foundStatBox0Line = False, False
+            elif foundEnerBox1Line and foundStatBox1Line:
+                Box1DataFrameContent.append(enerBox1+statBox1)
+                foundEnerBox1Line, foundStatBox1Line = False, False
+        self.Box0DataFrameContent = Box0DataFrameContent
+        self.Box1DataFrameContent = Box1DataFrameContent
+    def CallExtractors(self,fileName):
+        path = self.path
+        varsToExtract = self.varsToExtract
+        components = self.components
+        dimensions = self.dimensions
+        units = self.units
+        sections = self.sections
+        outData = {}
+        with open(path+fileName,'r') as fileContent: fileLines = fileContent.readlines()
+        if ('v' in varsToExtract): outData['V[A^3]'] = self.ExtractVolumes(fileLines)
+        if ('t' in varsToExtract): outData['T[K]'] = self.ExtractTemperatures(fileName,fileLines)
+        if ('p' in varsToExtract): outData[f'P[{units}]'] = self.ExtractPressures(fileName,fileLines)
+        if ('u' in varsToExtract): outData['U[K]'] = self.ExtractInternalEnergy(fileLines)
+        if ('rho' in varsToExtract): 
+            for comp in components:
+                outData['Rho[kg/m^3]'+f' {comp}'] = self.ExtractDensities(fileLines,comp)
+        if ('n' in varsToExtract): 
+            for comp in components:
+                outData['N'+f' {comp}'] = self.ExtractNumberOfMolecules(fileLines,comp)
+        if ('l' in varsToExtract): 
+            for dim in dimensions:
+                outData['Box-L[A]'+f' {dim}'] = self.ExtractBoxLengths(fileLines,dim)
+        return outData
 class SummarizeDataFrames():
     def __init__(self,dataFilesPath,groups,sort,joinDataFrames,countFrom):
         self.dataFilesPath = dataFilesPath
