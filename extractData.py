@@ -24,6 +24,7 @@ class Extract():
         self.sort = 'P'
         self.sections = ['init','prod']
         self.dimensions = ['x','y','z']
+        self.boxes = [0]
         self.varsToExtract = ['N']
         self.histsToExtract = []
         self.termalizationInPlots, self.termalizationInHists = 0, 0
@@ -42,6 +43,7 @@ class Extract():
         outFile = self.outFile
         dimensions = self.dimensions
         components = self.components
+        boxes = self.boxes
         varsToExtract = self.varsToExtract
         histsToExtract = self.histsToExtract
         sections = self.sections
@@ -74,6 +76,11 @@ class Extract():
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
                     varsToExtract.append(argv[j].lower())
+            elif (argv[i] == '-b'): 
+                boxes = []
+                for j in range(i+1,len(argv)):
+                    if (argv[j][0] == '-'): break
+                    boxes.append(int(argv[j]))
             elif (argv[i] == '-t'): 
                 sections = []
                 for j in range(i+1,len(argv)):
@@ -92,6 +99,7 @@ class Extract():
         self.outFile = outFile
         self.dimensions = dimensions
         self.components = components
+        self.boxes = boxes
         self.varsToExtract = varsToExtract
         self.histsToExtract = histsToExtract
         self.sections = sections
@@ -102,8 +110,8 @@ class Extract():
         sort = self.sort
         keys = list(outData.keys())
         longestKey = keys[0]
-        for i in range(1,len(keys)): # Use a python's library!
-            if (len(outData[keys[i]]) > len(outData[keys[i-1]])): longestKey = keys[i]
+        for i in range(1,len(keys)):
+            if len(outData[keys[i]]) > len(outData[keys[i-1]]): longestKey = keys[i]
         outData = pd.DataFrame(outData,index=range(len(outData[longestKey])))
         for key in outData.columns:
             findSortKey = re.search(f'^{sort}\[.+',key)
@@ -849,14 +857,10 @@ class Chainbuild(Extract):
 class GOMC(Extract):
     def __init__(self): 
         Extract.__init__(self,argv)
-        self.listLogFiles = []
-        self.sections = ['prod']
-        self.Box0DataFrameColumn, self.Box1DataFrameColumn = [], []
-        self.Box0DataFrameContent, self.Box1DataFrameContent = [], []
-    def FindComponents(self,logFileName):
+    def FindComponents(self, logFileName):
         with open(logFileName,'r') as logFile: fileLines = logFile.readlines()
         for line in range(len(fileLines)):
-            findComponent = re.search('Molecule Kind:\s+(.+?)',fileLines[line])
+            findComponent = re.search('Molecule Kind:\s+(.+)',fileLines[line])
             if findComponent: 
                 if findComponent.group(1) in self.components: break
                 self.components.append(findComponent.group(1))
@@ -870,7 +874,7 @@ class GOMC(Extract):
                 logFileFound = True
         if not logFileFound: print('Error: Log file not found. Exiting.'); exit(2)
         listLogFiles.sort()
-        self.listLogFiles = listLogFiles
+        self.listInFiles = listLogFiles
         self.FindComponents(path+listLogFiles[0])
     def PrintInputParameters(self):
         path = self.path
@@ -881,92 +885,270 @@ class GOMC(Extract):
         outFileName, createOutFile = self.outFile
         listInFiles = self.listInFiles
         components = self.components
+        sections = self.sections
+        boxes = self.boxes
         print(f'\tInput path: {path}')
         print(f'\tVariables to extract: {varsToExtract}')
         print(f'\tFluid components: {components}')
         print(f'\tSort variables according to: {sort}')
         print(f'\tSections to analyze: {sections}')
+        print(f'\tBoxes to analyze: {boxes}')
         print(f'\tBox dimensions: {dimensions}')
         print(f'\tCreate figures: {createFigures}')
         print(f'\tCreate output file: {createOutFile}')
         print(f'\tInput files:')
         for i in range(len(listInFiles)): print(f'\t\t{listInFiles[i]}')
-    def CreateDataFrameColumns(self,fileName):
+    def ReadDataFramesColumns(self, fileLines):
         path = self.path
         sections = self.sections
-        Box0DataFrameColumn, Box1DataFrameColumn = [], []
-        eTitleColumn, sTitleColumn = [], []
-        foundETitle = foundSTitle = False, False
-        with open(path+fileName,'r') as fileContent: fileLines = fileContent.readlines()
+        eTitleColumns, sTitleColumns, mTitleColumns = [], [], []
+        foundETitle, foundSTitle, foundMTitle = False, False, False
         for line in range(len(fileLines)):
-            findETitle = re.search('ETITLE:\s+(.+)')
-            findSTitle = re.search('STITLE:\s+STEP\s+(.+)')
+            findMTitle = re.search('MTITLE:\s+(.+)', fileLines[line])
+            findETitle = re.search('ETITLE:\s+(.+)', fileLines[line])
+            findSTitle = re.search('STITLE:\s+(.+)', fileLines[line])
             if findETitle and not foundETitle: 
-                eTitleColumn = findETitle.group(1).split()
+                eTitleColumns = findETitle.group(1).split()
                 foundETitle = True
             elif findSTitle and not foundSTitle: 
-                sTitleColumn = findSTitle.group(1).split()
+                sTitleColumns = findSTitle.group(1).split()
                 foundSTitle = True
-            if foundETitle and foundSTitle: break
-        Box0DataFrameColumn = eTitleColumn + sTitleColumn
-        Box1DataFrameColumn = eTitleColumn + sTitleColumn
-        self.Box0DataFrameColumn = Box0DataFrameColumn
-        self.Box1DataFrameColumn = Box1DataFrameColumn
-    def CreateDataFrameContent(self,fileName):
+            elif findMTitle and not foundMTitle: 
+                mTitleColumns = findMTitle.group(1).split()
+                foundMTitle = True
+            if foundETitle and foundSTitle and foundMTitle: break
+        return mTitleColumns, eTitleColumns, sTitleColumns
+    def ReadDataFramesContent(self, fileLines, dataFrameColumns):
         path = self.path
-        Box0DataFrameContent, Box1DataFrameContent = [], []
-        enerBox0, enerBox1, statBox0, statBox1 = [], [], [], []
-        foundEnerBox0Line, foundEnerBox1Line = False, False
-        foundStatBox0Line, foundStatBox1Line = False, False
-        with open(path+fileName,'r') as fileContent: fileLines = fileContent.readlines()
-        for line in range(len(fileLines)):
-            findEnerBox0 = re.search('ENER_0:\s+(.+)')
-            findStatBox0 = re.search('STAT_0:\s+\d+\s+(.+)')
-            findEnerBox1 = re.search('ENER_1:\s+(.+)')
-            findStatBox1 = re.search('STAT_1:\s+\d+\s+(.+)')
-            if findEnerBox0 and not foundEnerBox0Line: 
-                enerBox0 = findEnerBox0.group(1).split()
-                foundEnerBox0Line = True
-            elif findStatBox0 and not foundStatBox0Line:
-                statBox0 = findEnerBox0.group(1).split()
-                foundStatBox0Line = True
-            elif findEnerBox1 and not foundEnerBox1Line: 
-                enerBox1 = findEnerBox1.group(1).split()
-                foundEnerBox1Line = True
-            elif findStatBox1 and not foundStatBox1Line: 
-                statBox1 = findEnerBox1.group(1).split()
-                foundStatBox1Line = True
-            if foundEnerBox0Line and foundStatBox0Line:
-                Box0DataFrameContent.append(enerBox0+statBox0)
-                foundEnerBox0Line, foundStatBox0Line = False, False
-            elif foundEnerBox1Line and foundStatBox1Line:
-                Box1DataFrameContent.append(enerBox1+statBox1)
-                foundEnerBox1Line, foundStatBox1Line = False, False
-        self.Box0DataFrameContent = Box0DataFrameContent
-        self.Box1DataFrameContent = Box1DataFrameContent
-    def CallExtractors(self,fileName):
+        sections = self.sections
+        dataFrames = {'Box0':{'Ener':[], 'Stat':[]}, 
+                      'Box1':{'Ener':[], 'Stat':[]}}
+        mTitleColumns = dataFrameColumns[0]
+        eTitleColumns = dataFrameColumns[1]
+        sTitleColumns = dataFrameColumns[2]
+        for sec in sections:
+            if sec == 'init':
+                for line in range(len(fileLines)):
+                    findInitialSimulationSection = re.search('INITIAL SIMULATION ENERGY', fileLines[line])
+                    if findInitialSimulationSection:
+                        for subline in range(line+2,len(fileLines)):
+                            findStartingSimulationSection = re.search('STARTING SIMULATION', fileLines[subline])
+                            if findStartingSimulationSection: break
+                            findEnerBox0 = re.search('ENER_0:\s+(.+)', fileLines[subline])
+                            findStatBox0 = re.search('STAT_0:\s+(.+)', fileLines[subline])
+                            findPresBox0 = re.search('PRES_0:\s+(.+)', fileLines[subline])
+                            findEnerBox1 = re.search('ENER_1:\s+(.+)', fileLines[subline])
+                            findStatBox1 = re.search('STAT_1:\s+(.+)', fileLines[subline])
+                            findPresBox1 = re.search('PRES_1:\s+(.+)', fileLines[subline])
+                            if findEnerBox0: 
+                                row = np.array(findEnerBox0.group(1).split(),dtype='float')
+                                dataFrames['Box0']['Ener'].append(row)
+                            elif findEnerBox1: 
+                                row = np.array(findEnerBox1.group(1).split(),dtype='float')
+                                dataFrames['Box1']['Ener'].append(row)
+                            elif findStatBox0: 
+                                row = np.array(findStatBox0.group(1).split(),dtype='float')
+                                dataFrames['Box0']['Stat'].append(row)
+                            elif findStatBox1: 
+                                row = np.array(findStatBox1.group(1).split(),dtype='float')
+                                dataFrames['Box1']['Stat'].append(row)
+                            elif findPresBox0: 
+                                row = np.array(findPresBox0.group(1).split(),dtype='float')
+                                dataFrames['Box0']['Pres'].append(row)
+                            elif findPresBox1: 
+                                row = np.array(findPresBox1.group(1).split(),dtype='float')
+                                dataFrames['Box1']['Pres'].append(row)
+                        break
+            if sec == 'prod':
+                for line in range(len(fileLines)):
+                    findStartingSimulationSection = re.search('STARTING SIMULATION', fileLines[line])
+                    if findStartingSimulationSection: 
+                        for subline in range(line+2,len(fileLines)):
+                            findEnerBox0 = re.search('ENER_0:\s+(.+)', fileLines[subline])
+                            findStatBox0 = re.search('STAT_0:\s+(.+)', fileLines[subline])
+                            findPresBox0 = re.search('PRES_0:\s+(.+)', fileLines[subline])
+                            findEnerBox1 = re.search('ENER_1:\s+(.+)', fileLines[subline])
+                            findStatBox1 = re.search('STAT_1:\s+(.+)', fileLines[subline])
+                            findPresBox0 = re.search('PRES_1:\s+(.+)', fileLines[subline])
+                            if findEnerBox0: 
+                                row = np.array(findEnerBox0.group(1).split(),dtype='float')
+                                dataFrames['Box0']['Ener'].append(row)
+                            elif findEnerBox1: 
+                                row = np.array(findEnerBox1.group(1).split(),dtype='float')
+                                dataFrames['Box1']['Ener'].append(row)
+                            elif findStatBox0: 
+                                row = np.array(findStatBox0.group(1).split(),dtype='float')
+                                dataFrames['Box0']['Stat'].append(row)
+                            elif findStatBox1: 
+                                row = np.array(findStatBox1.group(1).split(),dtype='float')
+                                dataFrames['Box1']['Stat'].append(row)
+                            elif findPresBox0: 
+                                row = np.array(findPresBox0.group(1).split(),dtype='float')
+                                dataFrames['Box0']['Pres'].append(row)
+                            elif findPresBox1: 
+                                row = np.array(findPresBox1.group(1).split(),dtype='float')
+                                dataFrames['Box1']['Pres'].append(row)
+        for box in dataFrames.keys():
+            dataFrames[box]['Ener'] = pd.DataFrame(data=dataFrames[box]['Ener'],columns=eTitleColumns)
+            dataFrames[box]['Stat'] = pd.DataFrame(data=dataFrames[box]['Stat'],columns=sTitleColumns)
+        return dataFrames
+    def CallExtractors(self, fileName):
         path = self.path
         varsToExtract = self.varsToExtract
         components = self.components
         dimensions = self.dimensions
-        units = self.units
         sections = self.sections
+        boxes = self.boxes
         outData = {}
         with open(path+fileName,'r') as fileContent: fileLines = fileContent.readlines()
-        if ('v' in varsToExtract): outData['V[A^3]'] = self.ExtractVolumes(fileLines)
-        if ('t' in varsToExtract): outData['T[K]'] = self.ExtractTemperatures(fileName,fileLines)
-        if ('p' in varsToExtract): outData[f'P[{units}]'] = self.ExtractPressures(fileName,fileLines)
-        if ('u' in varsToExtract): outData['U[K]'] = self.ExtractInternalEnergy(fileLines)
-        if ('rho' in varsToExtract): 
-            for comp in components:
-                outData['Rho[kg/m^3]'+f' {comp}'] = self.ExtractDensities(fileLines,comp)
-        if ('n' in varsToExtract): 
-            for comp in components:
-                outData['N'+f' {comp}'] = self.ExtractNumberOfMolecules(fileLines,comp)
-        if ('l' in varsToExtract): 
-            for dim in dimensions:
-                outData['Box-L[A]'+f' {dim}'] = self.ExtractBoxLengths(fileLines,dim)
+        dataFrameColumns = self.ReadDataFramesColumns(fileLines)
+        dataFrames = self.ReadDataFramesContent(fileLines, dataFrameColumns)
+        for box in boxes:
+            if ('v' in varsToExtract): outData[f'Box{box}-V[A^3]'] = self.ExtractVolumes(fileLines, box)
+            if ('t' in varsToExtract): outData[f'Box{box}-T[K]'] = self.ExtractTemperatures(fileLines, box)
+            if ('p' in varsToExtract): outData[f'Box{box}-P[bar]'] = self.ExtractPressures(box)
+            if ('u' in varsToExtract): outData[f'Box{box}-U[K]'] = self.ExtractInternalEnergy(dataFrames, box)
+            if ('rho' in varsToExtract): 
+                for comp in components: 
+                    outData[f'Box{box}-Rho[kg/m^3] {comp}'] = self.ExtractDensities(dataFrames, box, comp)
+            if ('n' in varsToExtract): 
+                for comp in components: 
+                    outData[f'Box{box}-N {comp}'] = self.ExtractNumberOfMolecules(dataFrames, box, comp)
+            if ('l' in varsToExtract): 
+                for dim in dimensions: 
+                    outData[f'Box{box}-L[A] {dim}'] = self.ExtractBoxLengths(box, fileLines, dim)
         return outData
+    def ExtractVolumes(self, fileLines, box):
+        minLengths, maxLengths, boxLengths = [], [], []
+        foundMinLengths, foundMaxLengths = False, False
+        indices = [2, 5, 8]
+        volume = 0
+        print(f'Warning: Only initial volume of box {box} will be extracted.')
+        for line in range(len(fileLines)):
+            if foundMinLengths and foundMaxLengths: break
+            findMinLengths = re.search(f'Minimum coordinates in box {box}:\s+(.+)',fileLines[line])
+            findMaxLengths = re.search(f'Maximum coordinates in box {box}:\s+(.+)',fileLines[line])
+            if findMinLengths: 
+                minLengths = np.array(findMinLengths.group(1).split())[indices]
+                minLengths[0] = minLengths[0][:-1]
+                minLengths[1] = minLengths[1][:-1]
+                foundMinLengths = True
+            elif findMaxLengths: 
+                maxLengths = np.array(findMaxLengths.group(1).split())[indices]
+                maxLengths[0] = maxLengths[0][:-1]
+                maxLengths[1] = maxLengths[1][:-1]
+                foundMaxLenths = True
+        boxLengths = maxLengths.astype('float') - minLengths.astype('float')
+        volume = boxLengths[0]*boxLengths[1]*boxLengths[2] #A^3
+        return pd.Series([volume],index=range(1))
+    def ExtractTemperatures(self, fileLines, box):
+        temperatures = []
+        print(f'Warning: Only initial temperature will be extracted.')
+        for line in range(len(fileLines)):
+            findTemperature = re.search(f'Input Temperature\s+(\d+\.\d+)',fileLines[line])
+            if findTemperature: 
+                temperatures.append(float(findTemperature.group(1))); break #K
+        return pd.Series(temperatures,index=range(1))
+    def ExtractPressures(self, box): 
+        print('Warning: Cannot extract pressures from GOMC simulations.')
+        return pd.Series([np.nan],index=range(1))
+    def ExtractInternalEnergy(self, dataFrames, box):
+        if box == 0: return dataFrames['Box0']['Ener'][f'TOTAL']
+        elif box == 1: return dataFrames['Box1']['Ener'][f'TOTAL']
+    def ExtractDensities(self, dataFrames, box, comp):
+        if box == 0: 
+            densityFraction = dataFrames['Box0']['Stat'][f'MOLDENS_{comp}']
+            totalDensity = dataFrames['Box0']['Stat']['TOT_DENSITY']
+            return densityFraction*totalDensity
+        elif box == 1: 
+            densityFraction = dataFrames['Box1']['Stat'][f'MOLDENS_{comp}']
+            totalDensity = dataFrames['Box1']['Stat']['TOT_DENSITY']
+            return densityFraction*totalDensity
+    def ExtractNumberOfMolecules(self, dataFrames, box, comp):
+        if box == 0: 
+            molFraction = dataFrames['Box0']['Stat'][f'MOLFRAC_{comp}'].round()
+            totalMol = dataFrames['Box0']['Stat']['TOTALMOL'].round()
+            return molFraction*totalMol
+        elif box == 1: 
+            molFraction = dataFrames['Box1']['Stat'][f'MOLFRAC_{comp}'].round()
+            totalMol = dataFrames['Box1']['Stat']['TOTALMOL'].round()
+            return molFraction*totalMol
+    def ExtractBoxLengths(self, box, fileLines, dimLetter):
+        dimension = {'x':0,'y':1,'z':2}
+        indices = [2, 5, 8]
+        minLengths, maxLengths, boxLengths = [], [], []
+        foundMinLengths, foundMaxLengths = False, False
+        print(f'Warning: Only initial dimension {dimLetter} of box {box} will be extracted.')
+        for line in range(len(fileLines)):
+            if foundMinLengths and foundMaxLengths: break
+            findMinLengths = re.search(f'Minimum coordinates in box {box}:\s+(.+)',fileLines[line])
+            findMaxLengths = re.search(f'Maximum coordinates in box {box}:\s+(.+)',fileLines[line])
+            if findMinLengths: 
+                minLengths = np.array(findMinLengths.group(1).split())[indices]
+                minLengths[0] = minLengths[0][:-1]
+                minLengths[1] = minLengths[1][:-1]
+                foundMinLengths = True
+            elif findMaxLengths: 
+                maxLengths = np.array(findMaxLengths.group(1).split())[indices]
+                maxLengths[0] = maxLengths[0][:-1]
+                maxLengths[1] = maxLengths[1][:-1]
+                foundMaxLenths = True
+        boxLengths = maxLengths.astype('float') - minLengths.astype('float')
+        return pd.Series([boxLengths[dimension[dimLetter]]],index=range(1))
+    def PlotHistograms(self, outData, fileNumber, variable):
+        term = self.termalizationInHists
+        components = self.components
+        dimensions = self.dimensions
+        outPath,outFileName,outExtension = self.outFilePath
+        boxes = self.boxes
+        if outPath: outPath += 'histograms/' #If output file is in a subdirectory.
+        else: outPath = 'histograms/' #If output file is not in a subdirectory.
+        os.makedirs(outPath, exist_ok=True)
+        for box in boxes:
+            if ('v' == variable): 
+                plt.figure()
+                outData[f'Box{box}-V[A^3]'][term:].plot(bins=50,kind='hist')
+                plt.xlabel('V[A^3]')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Box{box}-V.pdf')
+            if ('t' == variable): 
+                plt.figure()
+                outData[f'Box{box}-T[K]'][term:].plot(bins=50,kind='hist')
+                plt.xlabel('T[K]')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Box{box}-T.pdf')
+            if ('p' == variable): 
+                plt.figure()
+                outData[f'Box{box}-P[bar]'][term:].plot(bins=50,kind='hist')
+                plt.xlabel(f'P[bar]')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Box{box}-P.pdf')
+            if ('u' == variable): 
+                plt.figure()
+                outData[f'Box{box}-U[K]'][term:].plot(bins=50,kind='hist')
+                plt.xlabel('U[K]')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Box{box}-U.pdf')
+            if ('rho' == variable): 
+                for comp in components: 
+                    plt.figure()
+                    outData[f'Box{box}-Rho[kg/mol] {comp}'][term:].plot(bins=50,kind='hist')
+                    plt.xlabel(f'Rho[kg/mol] {comp}')
+                    plt.tight_layout()
+                    plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Box{box}-Rho_{comp}.pdf')
+            if ('n' == variable): 
+                for comp in components: 
+                    plt.figure()
+                    outData[f'Box{box}-N {comp}'][term:].plot(bins=50,kind='hist')
+                    plt.xlabel(f'N {comp}')
+                    plt.tight_layout()
+                    plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Box{box}-N_{comp}.pdf')
+            if ('l' == variable): 
+                for dim in dimensions: 
+                    plt.figure()
+                    outData[f'Box{box}-L[A] {dim}'][term:].plot(bins=50,kind='hist')
+                    plt.xlabel(f'Box-L[A] {dim}')
+                    plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Box{box}-L_{dim}.pdf')
 class SummarizeDataFrames():
     def __init__(self,dataFilesPath,groups,sort,joinDataFrames,countFrom):
         self.dataFilesPath = dataFilesPath
@@ -1116,10 +1298,9 @@ if __name__ == '__main__':
     checkMotor = re.search(r'-m\s+(\w+)\s+',argvString.lower())
     if checkMotor:
         motor = checkMotor.group(1)
-        if motor == 'raspa': 
-            print('RASPA'); extract = Raspa()
-        elif motor == 'chainbuild': 
-            print('Chainbuild'); extract = Chainbuild()
+        if motor == 'raspa': print('RASPA'); extract = Raspa()
+        elif motor == 'chainbuild': print('Chainbuild'); extract = Chainbuild()
+        elif motor == 'gomc': print('GOMC'); extract = GOMC()
         else: print(f'Error: Simulation program not known: {motor}. Exiting.'); exit(2)
     else: print('Error: None simulation program found. Exiting.'); exit(2)
     print('\nReading input parameters...')
