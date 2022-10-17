@@ -12,8 +12,31 @@
 import os,re
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 from sys import argv,exit
+
+style = {'font.size': 36,
+         'font.family': 'serif',
+         'figure.figsize': (10,8),
+         'axes.labelsize': '26',
+         'axes.titlesize': '26',
+         'xtick.labelsize': '26',
+         'ytick.labelsize': '26',
+         'legend.fontsize': '25',
+         'xtick.direction': 'in',
+         'ytick.direction': 'in',
+         'lines.linewidth': 2,
+         'lines.markersize': 12,
+         'xtick.major.size': 18,
+         'ytick.major.size': 18,
+         'axes.grid': False,
+         'xtick.top': True,
+         'ytick.right': True,
+         'text.usetex': True}
+mpl.rcParams.update(style)
+
 ##########################################################################################################
 class Extract():
     def __init__(self,argv):
@@ -24,6 +47,7 @@ class Extract():
         self.sort = 'P'
         self.sections = ['init','prod']
         self.dimensions = ['x','y','z']
+        self.boxes = [0]
         self.varsToExtract = ['N']
         self.histsToExtract = []
         self.termalizationInPlots, self.termalizationInHists = 0, 0
@@ -42,6 +66,7 @@ class Extract():
         outFile = self.outFile
         dimensions = self.dimensions
         components = self.components
+        boxes = self.boxes
         varsToExtract = self.varsToExtract
         histsToExtract = self.histsToExtract
         sections = self.sections
@@ -74,6 +99,11 @@ class Extract():
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
                     varsToExtract.append(argv[j].lower())
+            elif (argv[i] == '-b'): 
+                boxes = []
+                for j in range(i+1,len(argv)):
+                    if (argv[j][0] == '-'): break
+                    boxes.append(int(argv[j]))
             elif (argv[i] == '-t'): 
                 sections = []
                 for j in range(i+1,len(argv)):
@@ -92,6 +122,7 @@ class Extract():
         self.outFile = outFile
         self.dimensions = dimensions
         self.components = components
+        self.boxes = boxes
         self.varsToExtract = varsToExtract
         self.histsToExtract = histsToExtract
         self.sections = sections
@@ -514,28 +545,28 @@ class Raspa(Extract):
             for comp in components: 
                 plt.figure()
                 outData[f'IdMu[K] {comp}'][term:].plot(bins=50,kind='hist')
-                plt.xlabel(f'IdMu[K] {comp}')
+                plt.xlabel(f'IdMu[K]')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_IdMu_{comp}.pdf')
         if ('exmu' == variable): 
             for comp in components: 
                 plt.figure()
                 outData[f'ExMu[K] {comp}'][term:].plot(bins=50,kind='hist')
-                plt.xlabel(f'ExMu[K] {comp}')
+                plt.xlabel(f'ExMu[K]')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_ExMu_{comp}.pdf')
         if ('rho' == variable): 
             for comp in components: 
                 plt.figure()
                 outData[f'Rho[kg/mol] {comp}'][term:].plot(bins=50,kind='hist')
-                plt.xlabel(f'Rho[kg/mol] {comp}')
+                plt.xlabel(f'Rho[kg/mol]')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Rho_{comp}.pdf')
         if ('n' == variable): 
             for comp in components: 
                 plt.figure()
                 outData[f'N {comp}'][term:].plot(bins=50,kind='hist')
-                plt.xlabel(f'N {comp}')
+                plt.xlabel(f'N')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_N_{comp}.pdf')
         if ('l' == variable): 
@@ -547,16 +578,17 @@ class Raspa(Extract):
 class Chainbuild(Extract):
     def __init__(self): 
         Extract.__init__(self,argv)
-        self.listLogFiles = []
+        self.listLogFiles, self.listNLogFiles = [], []
         self.solidFileName = ''
         self.molFileName = ''
         self.sigma_ff = self.epsilon_ff = 0
     def ReadInputFiles(self):
         path = self.path
-        listInputFiles, listLogFiles = [], []
+        listInputFiles, listLogFiles, listNLogFiles = [], [], []
         molFileFound = False 
         for fileName in os.listdir(path):
             if fileName.endswith('.inp'): listInputFiles.append(fileName)
+            elif fileName.endswith('.nlog'): listNLogFiles.append(fileName)
             elif fileName.endswith('.log'): listLogFiles.append(fileName)
             elif fileName.endswith('.sol'): self.solidFileName = fileName 
             elif fileName.endswith('.mol'): 
@@ -566,6 +598,7 @@ class Chainbuild(Extract):
         if not molFileFound: print('Error: Molecule file not found. Exiting.'); exit(2)
         listInputFiles.sort(); listLogFiles.sort()
         self.listInFiles = listInputFiles
+        self.listNLogFiles = listNLogFiles
         self.listLogFiles = listLogFiles
     def ExtractLennardJonesParameters(self,molFileName):
         with open(molFileName,'r') as molFile: molFileLines = molFile.readlines()
@@ -601,11 +634,16 @@ class Chainbuild(Extract):
         units = self.units
         sections = self.sections
         listLogFiles = self.listLogFiles
-        logFileName = ''
-        for logFile in listLogFiles:
+        listNLogFiles = self.listNLogFiles
+        logFileName, nLogFileName = '', ''
+        for logFile in listLogFiles: # Look for the log file related to the input file.
             if logFile[:-4] == inputFileName[:-4]: 
                 logFileName = logFile; break
         if not logFileName: print(f'Log file {inputFileName[:-4]}.log not found. Exiting.'); exit(2)
+        for nLogFile in listNLogFiles: # Look for the log file related to the input file.
+            if nLogFile[:-5] == inputFileName[:-4]: 
+                nLogFileName = nLogFile; break
+        if not nLogFileName: print(f'nlog file {inputFileName[:-4]}.nlog not found. Exiting.'); exit(2)
         outData = {}
         if ('v' in varsToExtract): outData['V[A^3]'] = self.ExtractVolumes(inputFileName)
         if ('t' in varsToExtract): outData['T[K]'] = self.ExtractTemperatures(inputFileName)
@@ -614,7 +652,7 @@ class Chainbuild(Extract):
         if ('idmu' in varsToExtract): outData['IdMu[K]'] = self.ExtractIdealWidomChemicalPotential(logFileName)
         if ('mu' in varsToExtract): outData['Mu[K]'] = self.ExtractChemicalPotential(inputFileName,logFileName)
         if ('rho' in varsToExtract): outData['Rho[A^-3]'] = self.ExtractDensities(inputFileName,logFileName)
-        if ('n' in varsToExtract): outData['N'] = self.ExtractNumberOfMolecules(inputFileName,logFileName)
+        if ('n' in varsToExtract): outData['N'] = self.ExtractNumberOfMolecules(inputFileName,nLogFileName)
         if ('l' in varsToExtract): 
             for dim in dimensions:
                 outData['Box-L[A]'+f' {dim}'] = self.ExtractBoxLengths(inputFileName,dim)
@@ -628,7 +666,7 @@ class Chainbuild(Extract):
             findEnsemble = re.search(f'ens\s+(\w+)\s+?(-?\d+\.?\d*)',fileLines[line])
             if findEnsemble: 
                 if findEnsemble.group(1) == 'gce':
-                    print('Ensemble is \"GCE\". Reading chemical potentials input file.')
+                    print('Ensemble is \"GCE\". Reading chemical potentials from input file.')
                     chemPots.append(float(findEnsemble.group(2)))
                 elif findEnsemble.group(1) == 'nvt':
                     print('Ensemble is \"NVT\". Reading excess chemical potentials from log file.')
@@ -677,7 +715,7 @@ class Chainbuild(Extract):
         if (len(energies) == 0): 
             print('Warning: No solid-fluid energy was not found from Chainbuild.'); energies.append(np.nan)
         return pd.Series(energies,index=range(len(energies)))*epsilon #K
-    def ExtractNumberOfMolecules(self,inputFileName,logFileName):
+    def ExtractNumberOfMolecules(self,inputFileName,nLogFileName):
         path = self.path
         nMolecules = []
         with open(path+inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
@@ -688,11 +726,9 @@ class Chainbuild(Extract):
                     print('Ensemble is \"NVT\". Reading number of molecules from input file.')
                     nMolecules.append(float(findNMolecules.group(2)))
                 elif findNMolecules.group(1) == 'gce':
-                    print('Ensemble is \"GCE\". Reading number of molecules from log file.')
-                    with open(path+logFileName,'r') as logFile: fileLines = logFile.readlines()
-                    for line in range(len(fileLines)):
-                        findNMolecules = re.search(f'N=\s+(\d+\.?\d*\w?[-+]?\d*)',fileLines[line])
-                        if findNMolecules: nMolecules.append(float(findNMolecules.group(1)))
+                    print('Ensemble is \"GCE\". Reading number of molecules from nlog file.')
+                    fileContent = np.loadtxt(path+nLogFileName,dtype='object')
+                    nMolecules = list(map(int,fileContent[:,1]))
                 break
         if (len(nMolecules) == 0): 
             print('Warning: Number of molecules was not found from Chainbuild'); nMolecules.append(np.nan)
@@ -793,56 +829,65 @@ class Chainbuild(Extract):
         os.makedirs(outPath, exist_ok=True)
         if ('v' == variable): 
             plt.figure()
-            outData['V[A^3]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData['V[A^3]'][term:],bins=50,discrete=False,
+                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
             plt.xlabel('V[A^3][K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_V.pdf')
         if ('t' == variable): 
             plt.figure()
-            outData['T[K]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData['T[K]'][term:],bins=50,discrete=False,
+                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
             plt.xlabel('T[K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_T.pdf')
         if ('uff' == variable): 
             plt.figure()
-            outData['Uff[K]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData['Uff[K]'][term:],bins=50,discrete=False,
+                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
             plt.xlabel('Uff[K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Uff.pdf')
         if ('usf' == variable): 
             plt.figure()
-            outData['Usf[K]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData['Usf[K]'][term:],bins=50,discrete=False,
+                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
             plt.xlabel('Usf[K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Usf.pdf')
         if ('idmu' == variable): 
             plt.figure()
-            outData['IdMu[K]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData['IdMu[K]'][term:],bins=50,discrete=False,
+                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
             plt.xlabel('IdMu[K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_IdMu.pdf')
         if ('mu' == variable): 
             plt.figure()
-            outData['Mu[K]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData['Mu[K]'][term:],bins=50,discrete=False,
+                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
             plt.xlabel('Mu[K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Mu.pdf')
         if ('rho' == variable): 
             plt.figure()
-            outData['Rho[A^-3]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData['Rho[A^-3]'][term:],bins=50,discrete=False,
+                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
             plt.xlabel('$\\rho [A^{-3}]$')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Rho.pdf')
         if ('n' == variable): 
             plt.figure()
-            outData['N'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData['N'][term:],bins=50,discrete=True,
+                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
             plt.xlabel('N')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_N.pdf')
         if ('l' == variable): 
             for dim in dimensions: 
                 plt.figure()
-                outData[f'Box-L[A] {dim}'][term:].plot(bins=50,kind='hist')
+                sns.histplot(data=outData[f'Box-L[A] {dim}'][term:],bins=50,discrete=False,
+                             kde=True,kde_kws={'bw_adjust':3},stat='probability')
                 plt.xlabel(f'Box-L[A] {dim}')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_L_{dim}.pdf')
@@ -1000,7 +1045,7 @@ if __name__ == '__main__':
         elif motor == 'chainbuild': 
             print('Chainbuild'); extract = Chainbuild()
         else: print(f'Error: Simulation program not known: {motor}. Exiting.'); exit(2)
-    else: print('Error: None simulation program found. Exiting.'); exit(2)
+    else: print('Error: No simulation program found. Exiting.'); exit(2)
     print('\nReading input parameters...')
     extract.Flags()
     print('\nReading input files...')
