@@ -54,6 +54,7 @@ class Extract():
         self.components, self.listInFiles, self.outFilePath = [], [], []
         self.outFile = ('outData.dat',False)
         self.printInputParams = self.createFigures = False
+        self.kernelDensity = False
         self.fileLines = self.fileNumber = 0
         self.fileName, self.dimLetter = '', ''
     def Flags(self):
@@ -73,11 +74,13 @@ class Extract():
         termalizationInPlots = self.termalizationInPlots
         termalizationInHists = self.termalizationInHists
         motor = self.motor
+        kernelDensity = self.kernelDensity
         for i in range(len(argv)):
             argv[i] = argv[i].lower()
             if (argv[i] == '-h'): self.Help()
             elif (argv[i] == '-p'): printInputParams = True
             elif (argv[i] == '-f'): createFigures = True
+            elif (argv[i] == '-kde'): kernelDensity = True
             elif (argv[i] == '-i'): path = argv[i+1]
             elif (argv[i] == '-u'): units = argv[i+1]
             elif (argv[i] == '-s'): sort = argv[i+1]
@@ -128,6 +131,7 @@ class Extract():
         self.sections = sections
         self.termalizationInPlots = termalizationInPlots
         self.termalizationInHists = termalizationInHists
+        self.kernelDensity = kernelDensity
     def CreateDataFrame(self,outData):
         dimensions = self.dimensions
         sort = self.sort
@@ -507,72 +511,83 @@ class Raspa(Extract):
         dimensions = self.dimensions
         units = self.units
         outPath,outFileName,outExtension = self.outFilePath
+        kde = self.kernelDensity
         if outPath: outPath += 'histograms/' #If output file is in a subdirectory.
         else: outPath = 'histograms/' #If output file is not in a subdirectory.
         os.makedirs(outPath, exist_ok=True)
         if ('v' == variable): 
             plt.figure()
-            outData['V[A^3]'][term:].plot(bins=50,kind='hist')
-            plt.xlabel('V[A^3]')
+            sns.histplot(data=outData['V[A^3]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['V[A^3]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$V$[A$^3$]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_V.pdf')
         if ('t' == variable): 
             plt.figure()
-            outData['T[K]'][term:].plot(bins=50,kind='hist')
-            plt.xlabel('T[K]')
+            sns.histplot(data=outData['T[K]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['T[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$T$[K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_T.pdf')
         if ('p' == variable): 
             plt.figure()
-            outData[f'P[{units}]'][term:].plot(bins=50,kind='hist')
-            plt.xlabel(f'P[{units}]')
+            sns.histplot(data=outData[f'P[{units}]]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'P[{units}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel(f'$P$[{units}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_P.pdf')
         if ('u' == variable): 
             plt.figure()
-            outData['U[K]'][term:].plot(bins=50,kind='hist')
-            plt.xlabel('U[K]')
+            sns.histplot(data=outData['U[K]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['U[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$U$[K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_U.pdf')
         if ('mu' == variable): 
             for comp in components: 
                 plt.figure()
-                outData['Mu[K]'][term:].plot(bins=50,kind='hist')
-                plt.xlabel('Mu[K]')
+                sns.histplot(data=outData['Mu[K]'][term:],bins=50,discrete=False,stat='probability')
+                if kde: sns.kdeplot(data=outData['Mu[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+                plt.xlabel('$\mu$[K]')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Mu_{comp}.pdf')
         if ('idmu' == variable): 
             for comp in components: 
                 plt.figure()
-                outData[f'IdMu[K] {comp}'][term:].plot(bins=50,kind='hist')
-                plt.xlabel(f'IdMu[K]')
+                sns.histplot(data=outData[f'IdMu[K]'][term:],bins=50,discrete=False,stat='probability')
+                if kde: sns.kdeplot(data=outData['IdMu[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+                plt.xlabel('$\mu_{\\rm id}$[K]')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_IdMu_{comp}.pdf')
         if ('exmu' == variable): 
             for comp in components: 
                 plt.figure()
-                outData[f'ExMu[K] {comp}'][term:].plot(bins=50,kind='hist')
-                plt.xlabel(f'ExMu[K]')
+                sns.histplot(data=outData[f'ExMu[K] {comp}'][term:],bins=50,discrete=False,stat='probability')
+                if kde: sns.kdeplot(data=outData['T[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+                plt.xlabel('$\mu_{\\rm ex}$[K]')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_ExMu_{comp}.pdf')
         if ('rho' == variable): 
             for comp in components: 
                 plt.figure()
-                outData[f'Rho[kg/mol] {comp}'][term:].plot(bins=50,kind='hist')
-                plt.xlabel(f'Rho[kg/mol]')
+                sns.histplot(data=outData[f'Rho[kg/mol] {comp}'][term:],bins=50,discrete=False,stat='probability')
+                if kde: sns.kdeplot(data=outData[f'Rho[kg/mol] {comp}'][term:],bw_adjust=3,color='r',linewidth=5)
+                plt.xlabel('$\\rho$[kg/mol]')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Rho_{comp}.pdf')
         if ('n' == variable): 
             for comp in components: 
                 plt.figure()
-                outData[f'N {comp}'][term:].plot(bins=50,kind='hist')
-                plt.xlabel(f'N')
+                sns.histplot(data=outData[f'N {comp}'][term:],bins=50,discrete=True,stat='probability')
+                if kde: sns.kdeplot(data=outData[f'N {comp}'][term:],bw_adjust=3,color='r',linewidth=5)
+                plt.xlabel('$N$')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_N_{comp}.pdf')
         if ('l' == variable): 
             for dim in dimensions: 
                 plt.figure()
-                outData[f'Box-L[A] {dim}'][term:].plot(bins=50,kind='hist')
+                sns.histplot(data=outData[f'Box-L[A] {dim}'][term:],bins=50,discrete=False,stat='probability')
+                if kde: sns.kdeplot(data=outData[f'Box-L[A] {dim}'][term:],bw_adjust=3,color='r',linewidth=5)
                 plt.xlabel(f'Box-L[A] {dim}')
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_L_{dim}.pdf')
 class Chainbuild(Extract):
@@ -824,70 +839,71 @@ class Chainbuild(Extract):
         term = self.termalizationInHists
         dimensions = self.dimensions
         outPath,outFileName,outExtension = self.outFilePath
+        kde = self.kernelDensity
         if outPath: outPath += 'histograms/' #If output file is in a subdirectory.
         else: outPath = 'histograms/' #If output file is not in a subdirectory.
         os.makedirs(outPath, exist_ok=True)
         if ('v' == variable): 
             plt.figure()
-            sns.histplot(data=outData['V[A^3]'][term:],bins=50,discrete=False,
-                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
-            plt.xlabel('V[A^3][K]')
+            sns.histplot(data=outData['V[A^3]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['V[A^3]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$V$[A^3]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_V.pdf')
         if ('t' == variable): 
             plt.figure()
-            sns.histplot(data=outData['T[K]'][term:],bins=50,discrete=False,
-                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
-            plt.xlabel('T[K]')
+            sns.histplot(data=outData['T[K]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['T[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$T$[K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_T.pdf')
         if ('uff' == variable): 
             plt.figure()
-            sns.histplot(data=outData['Uff[K]'][term:],bins=50,discrete=False,
-                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
-            plt.xlabel('Uff[K]')
+            sns.histplot(data=outData['Uff[K]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['Uff[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$U_{\\rm ff}$[K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Uff.pdf')
         if ('usf' == variable): 
             plt.figure()
-            sns.histplot(data=outData['Usf[K]'][term:],bins=50,discrete=False,
-                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
-            plt.xlabel('Usf[K]')
+            sns.histplot(data=outData['Usf[K]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['Usf[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$U_{\\rm sf}$[K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Usf.pdf')
         if ('idmu' == variable): 
             plt.figure()
-            sns.histplot(data=outData['IdMu[K]'][term:],bins=50,discrete=False,
-                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
-            plt.xlabel('IdMu[K]')
+            sns.histplot(data=outData['IdMu[K]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['IdMu[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$\mu_{\\rm id}$[K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_IdMu.pdf')
         if ('mu' == variable): 
             plt.figure()
-            sns.histplot(data=outData['Mu[K]'][term:],bins=50,discrete=False,
-                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
-            plt.xlabel('Mu[K]')
+            sns.histplot(data=outData['Mu[K]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['Mu[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$\mu$[K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Mu.pdf')
         if ('rho' == variable): 
             plt.figure()
-            sns.histplot(data=outData['Rho[A^-3]'][term:],bins=50,discrete=False,
-                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
+            sns.histplot(data=outData['Rho[A^-3]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['Rho[A^-3]'][term:],bw_adjust=3,color='r',linewidth=5)
             plt.xlabel('$\\rho [A^{-3}]$')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Rho.pdf')
         if ('n' == variable): 
             plt.figure()
-            sns.histplot(data=outData['N'][term:],bins=50,discrete=True,
-                         kde=True,kde_kws={'bw_adjust':3},stat='probability')
-            plt.xlabel('N')
+            sns.histplot(data=outData['N'][term:],bins=50,discrete=True,stat='probability')
+            if kde: sns.kdeplot(data=outData['N'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$N$')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_N.pdf')
         if ('l' == variable): 
             for dim in dimensions: 
                 plt.figure()
-                sns.histplot(data=outData[f'Box-L[A] {dim}'][term:],bins=50,discrete=False,
-                             kde=True,kde_kws={'bw_adjust':3},stat='probability')
+                sns.histplot(data=outData[f'Box-L[A] {dim}'][term:],bins=50,discrete=False,stat='probability')
+                if kde: sns.kdeplot(data=outData[f'Box-L[A] {dim}'][term:],bw_adjust=3,color='r',linewidth=5)
                 plt.xlabel(f'Box-L[A] {dim}')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_L_{dim}.pdf')
