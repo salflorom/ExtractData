@@ -1059,7 +1059,9 @@ class GOMC(Extract):
         for box in boxes:
             if ('v' in varsToExtract): outData[f'Box{box}-V[A^3]'] = self.ExtractVolumes(fileLines, box)
             if ('t' in varsToExtract): outData[f'Box{box}-T[K]'] = self.ExtractTemperatures(fileLines, box)
-            if ('p' in varsToExtract): outData[f'Box{box}-P[bar]'] = self.ExtractPressures(box)
+            if ('p' in varsToExtract): 
+                for comp in components: 
+                    outData[f'Box{box}-P[bar]'] = self.ExtractPressures(fileLines, box, comp)
             if ('u' in varsToExtract): outData[f'Box{box}-U[K]'] = self.ExtractInternalEnergy(dataFrames, box)
             if ('rho' in varsToExtract): 
                 for comp in components: 
@@ -1102,9 +1104,19 @@ class GOMC(Extract):
             if findTemperature: 
                 temperatures.append(float(findTemperature.group(1))); break #K
         return pd.Series(temperatures,index=range(1))
-    def ExtractPressures(self, box): 
-        print('Warning: Cannot extract pressures from GOMC simulations.')
-        return pd.Series([np.nan],index=range(1))
+    def ExtractPressures(self, fileLines, box, comp): 
+        fugacities = []
+        foundFugacity = False
+        for line in range(len(fileLines)):
+            findFugacity = re.search(f'Info: Fugacity\s+{comp}\s+(\d+\.?\d*)',fileLines[line])
+            if findFugacity: 
+                if not foundFugacity: 
+                    print('Warning: Only initial fugacities will be extracted.')
+                    foundFugacity = True
+                fugacities.append(float(findFugacity.group(1))); break #K
+        if len(fugacities) == 0: 
+            print('Warning: No fugacities were found.'); fugacities.append(np.nan)
+        return pd.Series(fugacities,index=range(1))
     def ExtractInternalEnergy(self, dataFrames, box):
         if box == 0: return dataFrames['Box0']['Ener'][f'TOTAL']
         elif box == 1: return dataFrames['Box1']['Ener'][f'TOTAL']
@@ -1186,14 +1198,14 @@ class GOMC(Extract):
                 for comp in components: 
                     plt.figure()
                     outData[f'Box{box}-Rho[kg/mol] {comp}'][term:].plot(bins=50,kind='hist')
-                    plt.xlabel(f'Rho[kg/mol] {comp}')
+                    plt.xlabel(f'Rho[kg/mol]')
                     plt.tight_layout()
                     plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Box{box}-Rho_{comp}.pdf')
             if ('n' == variable): 
                 for comp in components: 
                     plt.figure()
                     outData[f'Box{box}-N {comp}'][term:].plot(bins=50,kind='hist')
-                    plt.xlabel(f'N {comp}')
+                    plt.xlabel(f'N')
                     plt.tight_layout()
                     plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Box{box}-N_{comp}.pdf')
             if ('l' == variable): 
