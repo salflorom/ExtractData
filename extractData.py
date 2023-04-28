@@ -1214,6 +1214,178 @@ class GOMC(Extract):
                     outData[f'Box{box}-L[A] {dim}'][term:].plot(bins=50,kind='hist')
                     plt.xlabel(f'Box-L[A] {dim}')
                     plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Box{box}-L_{dim}.pdf')
+class LAMMPS(Extract):
+    def __init__(self): 
+        Extract.__init__(self, argv)
+        self.units = {}
+        self.unitStyle = ''
+    def ReadInputFiles(self):
+        path = self.path
+        listInpFiles = []
+        inpFileFound = False 
+        for fileName in os.listdir(path):
+            if fileName.endswith('.out'): 
+                listInpFiles.append(fileName)
+                inpFileFound = True
+        if not inpFileFound: print('Error: Input file not found. Exiting.'); exit(2)
+        self.ReadUnits(listInpFiles[0])
+        listInpFiles.sort()
+        self.listInFiles = listInpFiles
+    def ReadUnits(self, inpFileName):
+        path = self.path
+        findUnitStyle = False
+        unitStyle = 0
+        units = {}
+        with open(path+inpFileName, 'r') as file: fileLines = file.readlines()        
+        for line in fileLines:
+            findUnitStyle = re.search('Unit style\s+:\s+(.+)', line)
+            if findUnitStyle: 
+                unitStyle = findUnitStyle.group(1)
+                break
+        if not findUnitStyle: print('Error: Units not found. Exiting.'); exit(2)
+        if unitStyle == 'metal':
+            units['mass'] = 'g/mol'
+            units['distance'] = 'A'
+            units['volume'] = 'A^3'
+            units['time'] = 'ps'
+            units['energy'] = 'eV'
+            units['temperature'] = 'K'
+            units['pressure'] = 'bar'
+            units['charge'] = 'e'
+            units['density'] = 'g/cm^3'
+        elif unitStyle == 'lj':
+            units['mass'] = ''
+            units['distance'] = ''
+            units['volume'] = ''
+            units['time'] = ''
+            units['energy'] = ''
+            units['temperature'] = ''
+            units['pressure'] = ''
+            units['charge'] = ''
+        self.units = units
+        self.unitStyle = unitStyle
+    def PrintInputParameters(self):
+        path = self.path
+        varsToExtract = self.varsToExtract
+        unitStyle = self.unitStyle
+        sort = self.sort
+        dimensions = self.dimensions
+        createFigures = self.createFigures
+        outFileName, createOutFile = self.outFile
+        listInFiles = self.listInFiles
+        boxes = self.boxes
+        print(f'\tInput path: {path}')
+        print(f'\tVariables to extract: {varsToExtract}')
+        print(f'\tUnits style: {unitStyle}')
+        print(f'\tSort variables according to: {sort}')
+        print(f'\tBoxes to analyze: {boxes}')
+        print(f'\tBox dimensions: {dimensions}')
+        print(f'\tCreate figures: {createFigures}')
+        print(f'\tCreate output file: {createOutFile}')
+        print(f'\tInput files:')
+        for i in range(len(listInFiles)): print(f'\t\t{listInFiles[i]}')
+    def ReadDataFrame(self, fileLines, fileName):
+        path = self.path
+        for line in range(len(fileLines)):
+            findDataHeader = re.search('Per MPI rank memory allocation', fileLines[line])
+            if findDataHeader:
+                headerLine = line+1
+                for subline in range(line+1,len(fileLines)):
+                    findDataFooter = re.search('Loop time of', fileLines[subline])
+                    if findDataFooter:
+                        nRows = subline
+                        break
+                break
+        dataFrame = pd.read_csv(path+fileName, engine='python', delimiter='\s+', skiprows=headerLine, 
+                                nrows=nRows-headerLine-1)
+        return dataFrame
+    def CallExtractors(self, fileName): #Check!
+        path = self.path
+        varsToExtract = self.varsToExtract
+        dimensions = self.dimensions
+        units = self.units
+        outData = {}
+        with open(path+fileName,'r') as fileContent: fileLines = fileContent.readlines()
+        dataFrame = self.ReadDataFrame(fileLines, fileName)
+        if ('v' in varsToExtract): 
+            unit = units['volume']
+            outData[f'V[{unit}]'] = dataFrame['Volume']
+        if ('t' in varsToExtract): 
+            unit = units['temperature']
+            outData[f'T[{unit}]'] = dataFrame['Temp']
+        if ('p' in varsToExtract): 
+            unit = units['pressure']
+            outData[f'P[{unit}]'] = dataFrame['Press']
+        if ('u' in varsToExtract): 
+            unit = units['energy']
+            outData[f'U[{unit}]'] = dataFrame['TotEng']
+        if ('n' in varsToExtract): outData[f'N'] = dataFrame['Atoms']
+        if ('rho' in varsToExtract): 
+            unit = units['density']
+            outData[f'Rho[{unit}]'] = dataFrame['Density']
+        if ('mu' in varsToExtract): 
+            unit = units['energy']
+            outData[f'Mu[{unit}]'] = dataFrame['f_fxmu[1]'] #Check!
+        if ('l' in varsToExtract): 
+            unit = units['distance']
+            for dim in dimensions: outData[f'L[{unit}] {dim}'] = dataFrame[f'L{dim}']
+        return outData
+    def PlotHistograms(self, outData, fileNumber, variable):
+        term = self.termalizationInHists
+        dimensions = self.dimensions
+        units = self.units
+        outPath,outFileName,outExtension = self.outFilePath
+        if outPath: outPath += 'histograms/' #If output file is in a subdirectory.
+        else: outPath = 'histograms/' #If output file is not in a subdirectory.
+        os.makedirs(outPath, exist_ok=True)
+        if ('v' == variable): 
+            unit = units['volume']
+            plt.figure()
+            outData[f'V[{unit}]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel('V[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-V.pdf')
+        if ('t' == variable): 
+            unit = units['temperature']
+            plt.figure()
+            outData[f'T[{unit}]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel(f'T[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-T.pdf')
+        if ('p' == variable): 
+            unit = units['pressure']
+            plt.figure()
+            outData[f'P[{unit}]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel(f'P[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-P.pdf')
+        if ('u' == variable): 
+            unit = units['energy']
+            plt.figure()
+            outData[f'U[{unit}]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel(f'U[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-U.pdf')
+        if ('rho' == variable): 
+            unit = units['density']
+            plt.figure()
+            outData[f'Rho[{unit}]'][term:].plot(bins=50,kind='hist')
+            plt.xlabel(f'Rho[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Rho.pdf')
+        if ('n' == variable): 
+            plt.figure()
+            outData[f'N'][term:].plot(bins=50,kind='hist')
+            plt.xlabel(f'N')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-N.pdf')
+        if ('l' == variable): 
+            unit = units['distance']
+            for dim in dimensions: 
+                plt.figure()
+                outData[f'L[{unit}] {dim}'][term:].plot(bins=50,kind='hist')
+                plt.xlabel(f'L[{unit}] {dim}')
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-L_{dim}.pdf')
 class SummarizeDataFrames():
     def __init__(self,dataFilesPath,groups,sort,joinDataFrames,countFrom):
         self.dataFilesPath = dataFilesPath
@@ -1366,6 +1538,7 @@ if __name__ == '__main__':
         if motor == 'raspa': print('RASPA'); extract = Raspa()
         elif motor == 'chainbuild': print('Chainbuild'); extract = Chainbuild()
         elif motor == 'gomc': print('GOMC'); extract = GOMC()
+        elif motor == 'lammps': print('LAMMPS'); extract = LAMMPS()
         else: print(f'Error: Simulation program not known: {motor}. Exiting.'); exit(2)
     else: print('Error: No simulation program found. Exiting.'); exit(2)
     print('\nReading input parameters...')
