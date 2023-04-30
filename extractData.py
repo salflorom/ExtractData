@@ -172,6 +172,7 @@ class Extract():
     def ExtractData(self):
         listInFiles = self.listInFiles
         path = self.path
+        varsToExtract = self.varsToExtract
         histsToExtract = self.histsToExtract
         createFigures = self.createFigures
         outFileName, createOutFile = self.outFile
@@ -191,12 +192,16 @@ class Extract():
                 self.CreateOutFile(outData,i)
                 if createFigures: 
                     print('\nCreating figures...')
-                    self.PlotVariables(outData,i)
+                    for j in varsToExtract: 
+                        self.PlotVariables(outData,i,j)
+                        print(f'\t{outPath}Figures/{i}_{outFileName}_{j.upper()} ...')
             else:
                 if createFigures: 
                     _ = self.ReadOutputFile()
                     print('\nCreating figures...')
-                    self.PlotVariables(outData,i)
+                    for j in varsToExtract: 
+                        self.PlotVariables(outData,i,j)
+                        print(f'\tFigures/{i}_{outFileName}_{j.upper()} ...')
             if histsToExtract:
                 outPath, outFileName, outExtension = self.ReadOutputFile()
                 print(f'\nCreating histograms...')
@@ -1246,13 +1251,13 @@ class LAMMPS(Extract):
         if unitStyle == 'metal':
             units['mass'] = 'g/mol'
             units['distance'] = 'A'
-            units['volume'] = 'A^3'
+            units['volume'] = 'A$^3$'
             units['time'] = 'ps'
             units['energy'] = 'eV'
             units['temperature'] = 'K'
             units['pressure'] = 'bar'
             units['charge'] = 'e'
-            units['density'] = 'g/cm^3'
+            units['density'] = 'g/cm$^3$'
         elif unitStyle == 'lj':
             units['mass'] = ''
             units['distance'] = ''
@@ -1278,7 +1283,6 @@ class LAMMPS(Extract):
         print(f'\tVariables to extract: {varsToExtract}')
         print(f'\tUnits style: {unitStyle}')
         print(f'\tSort variables according to: {sort}')
-        print(f'\tBoxes to analyze: {boxes}')
         print(f'\tBox dimensions: {dimensions}')
         print(f'\tCreate figures: {createFigures}')
         print(f'\tCreate output file: {createOutFile}')
@@ -1286,6 +1290,7 @@ class LAMMPS(Extract):
         for i in range(len(listInFiles)): print(f'\t\t{listInFiles[i]}')
     def ReadDataFrame(self, fileLines, fileName):
         path = self.path
+        nRows, headerLine = 0, 0
         for line in range(len(fileLines)):
             findDataHeader = re.search('Per MPI rank memory allocation', fileLines[line])
             if findDataHeader:
@@ -1296,8 +1301,12 @@ class LAMMPS(Extract):
                         nRows = subline
                         break
                 break
-        dataFrame = pd.read_csv(path+fileName, engine='python', delimiter='\s+', skiprows=headerLine, 
-                                nrows=nRows-headerLine-1)
+        if not findDataFooter: 
+            print('Ending of simulation not found. Proceeding analysis with present data.')
+            dataFrame = pd.read_csv(path+fileName, engine='python', delimiter='\s+', skiprows=headerLine)
+        else: 
+            dataFrame = pd.read_csv(path+fileName, engine='python', delimiter='\s+', skiprows=headerLine, 
+                                    nrows=nRows-headerLine-1)
         return dataFrame
     def CallExtractors(self, fileName): #Check!
         path = self.path
@@ -1325,7 +1334,7 @@ class LAMMPS(Extract):
             outData[f'Rho[{unit}]'] = dataFrame['Density']
         if ('mu' in varsToExtract): 
             unit = units['energy']
-            outData[f'Mu[{unit}]'] = dataFrame['f_fxmu[1]'] #Check!
+            outData[f'$\mu$[{unit}]'] = dataFrame['f_fxmu[1]'] #Check!
         if ('l' in varsToExtract): 
             unit = units['distance']
             for dim in dimensions: outData[f'L[{unit}] {dim}'] = dataFrame[f'L{dim}']
@@ -1384,6 +1393,69 @@ class LAMMPS(Extract):
             for dim in dimensions: 
                 plt.figure()
                 outData[f'L[{unit}] {dim}'][term:].plot(bins=50,kind='hist')
+                plt.xlabel(f'L[{unit}] {dim}')
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-L_{dim}.pdf')
+    def PlotVariables(self, outData, fileNumber, variable):
+        term = self.termalizationInPlots
+        dimensions = self.dimensions
+        units = self.units
+        outPath,outFileName,outExtension = self.outFilePath
+        if outPath: outPath += 'Figures/' #If output file is in a subdirectory.
+        else: outPath = 'Figures/' #If output file is not in a subdirectory.
+        os.makedirs(outPath, exist_ok=True)
+        if ('v' == variable): 
+            unit = units['volume']
+            plt.figure()
+            outData[f'V[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.xlabel(f'V[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-V.pdf')
+        if ('t' == variable): 
+            unit = units['temperature']
+            plt.figure()
+            outData[f'T[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.xlabel(f'T[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-T.pdf')
+        if ('p' == variable): 
+            unit = units['pressure']
+            plt.figure()
+            outData[f'P[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.xlabel(f'P[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-P.pdf')
+        if ('u' == variable): 
+            unit = units['energy']
+            plt.figure()
+            outData[f'U[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.xlabel(f'U[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-U.pdf')
+        if ('rho' == variable): 
+            unit = units['density']
+            plt.figure()
+            outData[f'Rho[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.xlabel(f'Rho[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Rho.pdf')
+        if ('n' == variable): 
+            plt.figure()
+            outData[f'N'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.xlabel(f'N')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-N.pdf')
+        if ('mu' == variable): 
+            unit = units['energy']
+            plt.figure()
+            outData[f'$\mu$[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.xlabel(f'$\mu$[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Mu.pdf')
+        if ('l' == variable): 
+            unit = units['distance']
+            for dim in dimensions: 
+                plt.figure()
+                outData[f'L[{unit}] {dim}'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
                 plt.xlabel(f'L[{unit}] {dim}')
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-L_{dim}.pdf')
 class SummarizeDataFrames():
