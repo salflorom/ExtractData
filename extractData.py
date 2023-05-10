@@ -1316,6 +1316,8 @@ class LAMMPS(Extract):
         outData = {}
         with open(path+fileName,'r') as fileContent: fileLines = fileContent.readlines()
         dataFrame = self.ReadDataFrame(fileLines, fileName)
+        if ('s' in varsToExtract): 
+            outData['Step'] = dataFrame['Step']
         if ('v' in varsToExtract): 
             unit = units['volume']
             outData[f'V[{unit}]'] = dataFrame['Volume']
@@ -1334,7 +1336,7 @@ class LAMMPS(Extract):
             outData[f'Rho[{unit}]'] = dataFrame['Density']
         if ('mu' in varsToExtract): 
             unit = units['energy']
-            outData[f'$\mu$[{unit}]'] = dataFrame['f_fxmu[1]'] #Check!
+            outData[f'Mu[{unit}]'] = dataFrame['f_fxmu[1]'] #Check!
         if ('l' in varsToExtract): 
             unit = units['distance']
             for dim in dimensions: outData[f'L[{unit}] {dim}'] = dataFrame[f'L{dim}']
@@ -1407,48 +1409,48 @@ class LAMMPS(Extract):
             unit = units['volume']
             plt.figure()
             outData[f'V[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
-            plt.xlabel(f'V[{unit}]')
+            plt.ylabel(f'V[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-V.pdf')
         if ('t' == variable): 
             unit = units['temperature']
             plt.figure()
             outData[f'T[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.xlabel(f'T[{unit}]')
+            plt.ylabel(f'T[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-T.pdf')
         if ('p' == variable): 
             unit = units['pressure']
             plt.figure()
             outData[f'P[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.xlabel(f'P[{unit}]')
+            plt.ylabel(f'P[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-P.pdf')
         if ('u' == variable): 
             unit = units['energy']
             plt.figure()
             outData[f'U[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.xlabel(f'U[{unit}]')
+            plt.ylabel(f'U[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-U.pdf')
         if ('rho' == variable): 
             unit = units['density']
             plt.figure()
             outData[f'Rho[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.xlabel(f'Rho[{unit}]')
+            plt.ylabel(f'$\\rho$[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Rho.pdf')
         if ('n' == variable): 
             plt.figure()
             outData[f'N'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.xlabel(f'N')
+            plt.ylabel(f'N')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-N.pdf')
         if ('mu' == variable): 
             unit = units['energy']
             plt.figure()
-            outData[f'$\mu$[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.xlabel(f'$\mu$[{unit}]')
+            outData[f'Mu[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.ylabel(f'$\mu$[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Mu.pdf')
         if ('l' == variable): 
@@ -1456,7 +1458,8 @@ class LAMMPS(Extract):
             for dim in dimensions: 
                 plt.figure()
                 outData[f'L[{unit}] {dim}'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-                plt.xlabel(f'L[{unit}] {dim}')
+                plt.ylabel(f'L[{unit}] {dim}')
+                plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-L_{dim}.pdf')
 class SummarizeDataFrames():
     def __init__(self,dataFilesPath,groups,sort,joinDataFrames,countFrom):
