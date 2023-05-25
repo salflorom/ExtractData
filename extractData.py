@@ -1291,7 +1291,7 @@ class LAMMPS(Extract):
     def ReadDataFrame(self, fileLines, fileName):
         path = self.path
         nRows, headerLine = 0, 0
-        for line in range(len(fileLines)):
+        for line in range(len(fileLines)-1,0,-1):
             findDataHeader = re.search('Per MPI rank memory allocation', fileLines[line])
             if findDataHeader:
                 headerLine = line+1
@@ -1330,16 +1330,16 @@ class LAMMPS(Extract):
         if ('u' in varsToExtract): 
             unit = units['energy']
             outData[f'U[{unit}]'] = dataFrame['TotEng']
-        if ('n' in varsToExtract): outData[f'N'] = dataFrame['Atoms']
+        if ('n' in varsToExtract): outData['N'] = dataFrame['Atoms']
         if ('rho' in varsToExtract): 
             unit = units['density']
             outData[f'Rho[{unit}]'] = dataFrame['Density']
-        if ('mu' in varsToExtract): 
-            unit = units['energy']
-            outData[f'Mu[{unit}]'] = dataFrame['f_fxmu[1]'] #Check!
         if ('l' in varsToExtract): 
             unit = units['distance']
             for dim in dimensions: outData[f'L[{unit}] {dim}'] = dataFrame[f'L{dim}']
+        for var in varsToExtract:
+            if ('_' in var):
+                outData[f'{var}'] = dataFrame[f'{var}']
         return outData
     def PlotHistograms(self, outData, fileNumber, variable):
         term = self.termalizationInHists
@@ -1397,6 +1397,12 @@ class LAMMPS(Extract):
                 outData[f'L[{unit}] {dim}'][term:].plot(bins=50,kind='hist')
                 plt.xlabel(f'L[{unit}] {dim}')
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-L_{dim}.pdf')
+        if ('_' in variable):
+            plt.figure()
+            outData[f'{variable}'][term:].plot(bins=50,kind='hist')
+            plt.xlabel(f'{variable}')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-{variable}.pdf')
     def PlotVariables(self, outData, fileNumber, variable):
         term = self.termalizationInPlots
         dimensions = self.dimensions
@@ -1461,6 +1467,12 @@ class LAMMPS(Extract):
                 plt.ylabel(f'L[{unit}] {dim}')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-L_{dim}.pdf')
+        if ('_' in variable):
+            plt.figure()
+            outData[f'{variable}'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.ylabel(f'{variable}')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-{variable}.pdf')
 class SummarizeDataFrames():
     def __init__(self,dataFilesPath,groups,sort,joinDataFrames,countFrom):
         self.dataFilesPath = dataFilesPath
