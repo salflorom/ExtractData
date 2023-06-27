@@ -16,7 +16,6 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from scipy.signal import correlate
 from sys import argv,exit
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -1612,16 +1611,16 @@ class SummarizeDataFrames():
             group = groupedDataFrames[i]
             nDataFrames = len(group)
             sqrGroupVar = np.zeros(nDataFrames,dtype='object')
-            averages, variances, sqrVariances = np.zeros(nDataFrames), np.zeros(nDataFrames), np.zeros(nDataFrames)
+            averages, stdevs, sqrStdevs = np.zeros(nDataFrames), np.zeros(nDataFrames), np.zeros(nDataFrames)
             for var in group[0].columns:
                 for j in range(nDataFrames):
                     averages[j] = group[j][var].mean()
-                    variances[j] = group[j][var].var()
+                    stdevs[j] = np.sqrt(group[j][var].std())
                     sqrGroupVar[j] = group[j][var]**2
-                    sqrVariances[j] = sqrGroupVar[j].var()
+                    sqrStdevs[j] = np.sqrt(sqrGroupVar[j].std())
                 summedDataFrames[i][var] = pd.Series(averages)
-                summedDataFrames[i][f'delta{var}'] = pd.Series(variances)
-                summedDataFrames[i][f'deltasqr{var}'] = pd.Series(sqrVariances)
+                summedDataFrames[i][f'delta{var}'] = pd.Series(stdevs)
+                summedDataFrames[i][f'deltasqr{var}'] = pd.Series(sqrStdevs)
             summedDataFrames[i].sort_values(sort,ignore_index=True,inplace=True)
         self.summedDataFrames = summedDataFrames
     def Extract(self):
