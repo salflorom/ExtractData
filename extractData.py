@@ -10,12 +10,15 @@
 #   python3 extractRaspaData.py -h 
 
 import os,re
+import warnings
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from sys import argv,exit
+
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 style = {'font.size': 36,
          'font.family': 'serif',
@@ -217,7 +220,9 @@ class Extract():
         print(f'\nNormal termination.')
         exit(0)
 class Raspa(Extract):
-    def __init__(self): Extract.__init__(self,argv)
+    def __init__(self): 
+        Extract.__init__(self,argv)
+        self.ReadUnits()
     def FindComponents(self,inputFileName):
         with open(inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
         for line in range(len(fileLines)):
@@ -226,13 +231,24 @@ class Raspa(Extract):
                 if findComponent.group(1) in self.components: break
                 self.components.append(findComponent.group(1))
     def ReadInputFiles(self):
-        argv = self.argv
         path = self.path
         listInFiles = []
         for fileName in os.listdir(path): 
             if fileName.endswith('.data'): listInFiles.append(fileName)
         self.listInFiles = listInFiles
         self.FindComponents(path+listInFiles[0])
+    def ReadUnits(self):
+        units = {}
+        units['mass'] = 'a.u.'
+        units['distance'] = '\\r{A}'
+        units['volume'] = '\\r{A}$^3$'
+        units['time'] = 'ps'
+        units['energy'] = 'K'
+        units['temperature'] = 'K'
+        units['pressure'] = 'Pa'
+        units['charge'] = 'a.u.'
+        units['density'] = 'kg/m$^3$'
+        self.units = units
     def PrintInputParameters(self):
         path = self.path
         varsToExtract = self.varsToExtract
@@ -242,18 +258,16 @@ class Raspa(Extract):
         outFileName, createOutFile = self.outFile
         listInFiles = self.listInFiles
         components = self.components
-        units = self.units
         sections = self.sections
         print(f'\tInput path: {path}')
         print(f'\tVariables to extract: {varsToExtract}')
         print(f'\tFluid components: {components}')
-        print(f'\tPressure unit: {units}')
         print(f'\tSort variables according to: {sort}')
         print(f'\tSections to analyze: {sections}')
         print(f'\tBox dimensions: {dimensions}')
         print(f'\tCreate figures: {createFigures}')
         print(f'\tCreate output file: {createOutFile}')
-        print(f'\tInput files:')
+        print( '\tInput files:')
         for i in range(len(listInFiles)): print(f'\t\t{listInFiles[i]}')
     def CallExtractors(self,fileName):
         path = self.path
@@ -261,37 +275,49 @@ class Raspa(Extract):
         components = self.components
         dimensions = self.dimensions
         units = self.units
-        sections = self.sections
         outData = {}
         with open(path+fileName,'r') as fileContent: fileLines = fileContent.readlines()
-        if ('v' in varsToExtract): outData['V[A^3]'] = self.ExtractVolumes(fileLines)
-        if ('t' in varsToExtract): outData['T[K]'] = self.ExtractTemperatures(fileName,fileLines)
-        if ('p' in varsToExtract): outData[f'P[{units}]'] = self.ExtractPressures(fileName,fileLines)
-        if ('u' in varsToExtract): outData['U[K]'] = self.ExtractInternalEnergy(fileLines)
+        if ('v' in varsToExtract): 
+            unit = units['volume']
+            outData[f'V[{unit}]'] = self.ExtractVolumes(fileLines)
+        if ('t' in varsToExtract): 
+            unit = units['temperature']
+            outData[f'T[{unit}]'] = self.ExtractTemperatures(fileName,fileLines)
+        if ('p' in varsToExtract): 
+            unit = units['pressure']
+            outData[f'P[{unit}]'] = self.ExtractPressures(fileName,fileLines)
+        if ('u' in varsToExtract): 
+            unit = units['energy']
+            outData[f'U[{unit}]'] = self.ExtractInternalEnergy(fileLines)
         if ('mu' in varsToExtract): 
+            unit = units['energy']
             for comp in components:
                 chemPots,deltaChemPots = self.ExtractWidomChemicalPotential(fileLines,comp)
-                outData['Mu[K]'+f' {comp}'] = chemPots
-                if (len(deltaChemPots) != 0): outData['deltaMu[K]'+f' {comp}'] = deltaChemPots
+                outData[f'Mu[{unit}] {comp}'] = chemPots
+                if (len(deltaChemPots) != 0): outData[f'deltaMu[{unit}] {comp}'] = deltaChemPots
         if ('idmu' in varsToExtract): 
+            unit = units['energy']
             for comp in components:
                 chemPots,deltaChemPots = self.ExtractIdealWidomChemicalPotential(fileLines,comp)
-                outData['IdMu[K]'+f' {comp}'] = chemPots
-                if (len(deltaChemPots) != 0): outData['deltaIdMu[K]'+f' {comp}'] = deltaChemPots
+                outData[f'IdMu[{unit}] {comp}'] = chemPots
+                if (len(deltaChemPots) != 0): outData[f'deltaIdMu[{unit}] {comp}'] = deltaChemPots
         if ('exmu' in varsToExtract): 
+            unit = units['energy']
             for comp in components:
                 chemPots,deltaChemPots = self.ExtractExcessWidomChemicalPotential(fileLines,comp)
-                outData['ExMu[K]'+f' {comp}'] = chemPots
-                if (len(deltaChemPots) != 0): outData['deltaExMu[K]'+f' {comp}'] = deltaChemPots
+                outData[f'ExMu[{unit}] {comp}'] = chemPots
+                if (len(deltaChemPots) != 0): outData[f'deltaExMu[{unit}] {comp}'] = deltaChemPots
         if ('rho' in varsToExtract): 
+            unit = units['density']
             for comp in components:
-                outData['Rho[kg/m^3]'+f' {comp}'] = self.ExtractDensities(fileLines,comp)
+                outData[f'Rho[{unit}] {comp}'] = self.ExtractDensities(fileLines,comp)
         if ('n' in varsToExtract): 
             for comp in components:
-                outData['N'+f' {comp}'] = self.ExtractNumberOfMolecules(fileLines,comp)
+                outData[f'N {comp}'] = self.ExtractNumberOfMolecules(fileLines,comp)
         if ('l' in varsToExtract): 
+            unit = units['distance']
             for dim in dimensions:
-                outData['Box-L[A]'+f' {dim}'] = self.ExtractBoxLengths(fileLines,dim)
+                outData[f'Box-L[{unit}] {dim}'] = self.ExtractBoxLengths(fileLines,dim)
         return outData
     def ExtractVolumes(self,fileLines):
         sections = self.sections
@@ -307,7 +333,7 @@ class Raspa(Extract):
                     if findVolume: volumes.append(float(findVolume.group(1))) #A^3
         return pd.Series(volumes,index=range(len(volumes)))
     def ExtractPressures(self,fileName,fileLines):
-        units = self.units
+        units = self.units['pressure']
         sections = self.sections
         pressures = []
         for sec in sections:
@@ -318,10 +344,8 @@ class Raspa(Extract):
                     if (findPressure and float(findPressure.group(1)) != 0.0): pressures.append(float(findPressure.group(1)))
         if (len(pressures) == 0):
             print('No molecular pressures were found. Extracting fixed external pressure.')
-            findPressure = re.search(f'.+_(\d+\.?\d*e?\+?\d*)\.data',fileName)
-            if units == 'bar': pressures.append(float(findPressure.group(1))*1e-5)
-            elif units == 'atm': pressures.append(float(findPressure.group(1))*9.896e-6)
-            else: pressures.append(float(findPressure.group(1))*1e-3) #kPa
+            findPressure = re.search(r'.+_(\d+\.?\d*e?\+?\d*)\.data',fileName)
+            pressures.append(float(findPressure.group(1))) #Pa
         return pd.Series(pressures,index=range(len(pressures)))
     def ExtractTemperatures(self,fileName,fileLines):
         sections = self.sections
@@ -330,11 +354,11 @@ class Raspa(Extract):
             if (sec.lower() == 'init'):
                 print('Warning: Temperature is not calculated by RASPA during initialization cycles.')
                 for line in range(len(fileLines)):
-                    findTemperature = re.search(f'^Temperature:\s+(\d+\.?\d*)$',fileLines[line])
+                    findTemperature = re.search('^Temperature:\s+(\d+\.?\d*)$',fileLines[line])
                     if findTemperature: temperatures.append(float(findTemperature.group(1)))
             elif (sec.lower() == 'prod'):
                 for line in range(len(fileLines)):
-                    findTemperature = re.search(f'Temperature:\s+(\d+\.?\d*).+Translational',fileLines[line])
+                    findTemperature = re.search('Temperature:\s+(\d+\.?\d*).+Translational',fileLines[line])
                     if findTemperature: temperatures.append(float(findTemperature.group(1)))
             if (len(temperatures) == 0):
                 print('No molecular temperatures were found. Extracting fixed external temperatures.')
@@ -348,14 +372,14 @@ class Raspa(Extract):
                 print('Warning: Internal energy is not calculated by RASPA during initialization, equilibration and production cycles.')
                 print('Conserved energy will be extracted. It is calculated after initialization cycles (from equilibration and production cycles).')
                 for line in range(len(fileLines)):
-                    findEnergy = re.search(f'^Conserved\senergy:\s+(-?\d+\.?\d*)',fileLines[line])
+                    findEnergy = re.search('^Conserved\senergy:\s+(-?\d+\.?\d*)',fileLines[line])
                     if findEnergy: energies.append(float(findEnergy.group(1)))
                 if (len(energies) == 0):
                     print('Warning: There was no conserved energy to extract. Extracting current energies per cycle.')
                     currentEnergies = []
                     for line in range(len(fileLines)):
-                        currentEnergy = re.search(f'Current.+energy:\s+(-?\d+\.?\d*)',fileLines[line])
-                        lastCurrentEnergy = re.search(f'Current Adsorbate-Cation energy:\s+(-?\d+\.?\d*)',fileLines[line])
+                        currentEnergy = re.search('Current.+energy:\s+(-?\d+\.?\d*)',fileLines[line])
+                        lastCurrentEnergy = re.search('Current Adsorbate-Cation energy:\s+(-?\d+\.?\d*)',fileLines[line])
                         if lastCurrentEnergy: 
                             currentEnergies.append(float(lastCurrentEnergy.group(1)))
                             energies.append(sum(currentEnergies))
@@ -363,9 +387,9 @@ class Raspa(Extract):
                         elif currentEnergy: currentEnergies.append(float(currentEnergy.group(1)))
             elif (sec.lower() == 'prod'):
                 for line in range(len(fileLines)-1,0,-1):
-                    findEnergy = re.search(f'Total energy:',fileLines[line])
+                    findEnergy = re.search('Total energy:',fileLines[line])
                     if findEnergy:
-                        energy = re.search(f'Average\s+(-?\d+\.\d+).+?(\d+\.\d+)',fileLines[line+8])
+                        energy = re.search('Average\s+(-?\d+\.\d+).+?(\d+\.\d+)',fileLines[line+8])
                         energies.append(float(energy.group(1))) #J/kb
                         deltaEnergies.append(float(energy.group(2))) #J/kb
                         break
@@ -405,11 +429,11 @@ class Raspa(Extract):
         for sec in sections:
             if (sec.lower() == 'init'):
                 for line in range(len(fileLines)):
-                    findLength = re.search(f'Box-lengths:\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+Box-angles',fileLines[line])
+                    findLength = re.search('Box-lengths:\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+Box-angles',fileLines[line])
                     if findLength: boxLengths.append(float(findLength.group(dimension[dimLetter]))) #A
             if (sec.lower() == 'prod'):
                 for line in range(len(fileLines)):
-                    findLength = re.search(f'Box-lengths:\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+(\d+\.?\d*).+Average',fileLines[line])
+                    findLength = re.search('Box-lengths:\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+(\d+\.?\d*).+Average',fileLines[line])
                     if findLength: boxLengths.append(float(findLength.group(dimension[dimLetter]))) #A
         return pd.Series(boxLengths,index=range(len(boxLengths)))
     def ExtractNumberOfMolecules(self,fileLines,component):
@@ -433,7 +457,7 @@ class Raspa(Extract):
                 print('Warning: Chemical potential is not calculated by RASPA during initialization and equilibration cycles.')
             elif (sec.lower() == 'prod'):
                 for line in range(len(fileLines)-1,0,-1):
-                    findChemPot = re.search(f'Average Widom chemical potential:',fileLines[line])
+                    findChemPot = re.search('Average Widom chemical potential:',fileLines[line])
                     if findChemPot:
                         for subline in range(line+8,len(fileLines),7):
                             chemPot = re.search(f'\[{component}\]\s+Average.+?(-?\d+\.?\d*)\s+.+?(\d+\.?\d*)',fileLines[subline])
@@ -559,7 +583,7 @@ class Raspa(Extract):
         if ('idmu' == variable): 
             for comp in components: 
                 plt.figure()
-                sns.histplot(data=outData[f'IdMu[K]'][term:],bins=50,discrete=False,stat='probability')
+                sns.histplot(data=outData['IdMu[K]'][term:],bins=50,discrete=False,stat='probability')
                 if kde: sns.kdeplot(data=outData['IdMu[K]'][term:],bw_adjust=3,color='r',linewidth=5)
                 plt.xlabel('$\mu_{\\rm id}$[K]')
                 plt.tight_layout()
@@ -595,6 +619,73 @@ class Raspa(Extract):
                 if kde: sns.kdeplot(data=outData[f'Box-L[A] {dim}'][term:],bw_adjust=3,color='r',linewidth=5)
                 plt.xlabel(f'Box-L[A] {dim}')
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_L_{dim}.pdf')
+    def PlotVariables(self, outData, fileNumber, variable):
+        term = self.termalizationInPlots
+        dimensions = self.dimensions
+        components = self.components
+        units = self.units
+        outPath,outFileName,outExtension = self.outFilePath
+        if outPath: outPath += 'Figures/' #If output file is in a subdirectory.
+        else: outPath = 'Figures/' #If output file is not in a subdirectory.
+        os.makedirs(outPath, exist_ok=True)
+        if ('v' == variable): 
+            unit = units['volume']
+            plt.figure()
+            outData[f'V[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.ylabel(f'V[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-V.pdf')
+        if ('t' == variable): 
+            unit = units['temperature']
+            plt.figure()
+            outData[f'T[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.ylabel(f'T[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-T.pdf')
+        if ('p' == variable): 
+            unit = units['pressure']
+            plt.figure()
+            outData[f'P[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.ylabel(f'P[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-P.pdf')
+        if ('u' == variable): 
+            unit = units['energy']
+            plt.figure()
+            outData[f'U[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.ylabel(f'U[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-U.pdf')
+        if ('rho' == variable): 
+            unit = units['density']
+            for comp in components:
+                plt.figure()
+                outData[f'Rho[{unit}] {comp}'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+                plt.ylabel(f'$\\rho$[{unit}] ({comp})')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Rho_{comp}.pdf')
+        if ('n' == variable): 
+            for comp in components:
+                plt.figure()
+                outData[f'N {comp}'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+                plt.ylabel(f'N {comp}')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-N_{comp}.pdf')
+        if ('mu' == variable): 
+            unit = units['energy']
+            plt.figure()
+            outData[f'Mu[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.ylabel(f'$\mu$[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Mu.pdf')
+        if ('l' == variable): 
+            unit = units['distance']
+            for dim in dimensions: 
+                plt.figure()
+                outData[f'L[{unit}] {dim}'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+                plt.ylabel(f'L[{unit}] {dim}')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-L_{dim}.pdf')
 class Chainbuild(Extract):
     def __init__(self): 
         Extract.__init__(self,argv)
@@ -636,6 +727,8 @@ class Chainbuild(Extract):
         createFigures = self.createFigures
         outFileName, createOutFile = self.outFile
         listInFiles = self.listInFiles
+        listLogFiles = self.listLogFiles
+        listNLogFiles = self.listNLogFiles
         sections = self.sections
         print(f'\tInput path: {path}')
         print(f'\tVariables to extract: {varsToExtract}')
@@ -647,6 +740,12 @@ class Chainbuild(Extract):
         print(f'\tInput files:')
         for i in range(len(listInFiles)):
             print(f'\t\t{listInFiles[i]}')
+        print(f'\tLog files:')
+        for i in range(len(listInFiles)):
+            print(f'\t\t{listLogFiles[i]}')
+        print(f'\tnLog files:')
+        for i in range(len(listInFiles)):
+            print(f'\t\t{listNLogFiles[i]}')
     def CallExtractors(self,inputFileName):
         varsToExtract = self.varsToExtract
         components = self.components
@@ -840,6 +939,59 @@ class Chainbuild(Extract):
                         print('Warning: Density was not found from Chainbuild'); density.append(np.nan)
                 break
         return pd.Series(density,index=range(len(density)))/sigma**3 #Angstrom^-3
+    def PlotVariables(self,outData,fileNumber,variable):
+        term = self.termalizationInPlots
+        dimensions = self.dimensions
+        outPath,outFileName,outExtension = self.outFilePath
+        if outPath: outPath += 'Figures/' #If output file is in a subdirectory.
+        else: outPath = 'Figures/' #If output file is not in a subdirectory.
+        os.makedirs(outPath, exist_ok=True)
+        if ('v' == variable): 
+            plt.figure()
+            outData['V[A^3]'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_V.pdf')
+        if ('t' == variable): 
+            plt.figure()
+            outData['T[K]'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_T.pdf')
+        if ('uff' == variable): 
+            plt.figure()
+            outData['Uff[K]'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Uff.pdf')
+        if ('usf' == variable): 
+            plt.figure()
+            outData['Usf[K]'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Usf.pdf')
+        if ('idmu' == variable): 
+            plt.figure()
+            outData['IdMu[K]'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_IdMu.pdf')
+        if ('mu' == variable): 
+            plt.figure()
+            outData['Mu[K]'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Mu.pdf')
+        if ('rho' == variable): 
+            plt.figure()
+            outData['Rho[A^-3]'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Rho.pdf')
+        if ('n' == variable): 
+            plt.figure()
+            outData['N'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_N.pdf')
+        if ('l' == variable): 
+            for dim in dimensions: 
+                plt.figure()
+                outData[f'Box-L[A] {dim}'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_L_{dim}.pdf')
     def PlotHistograms(self,outData,fileNumber,variable):
         term = self.termalizationInHists
         dimensions = self.dimensions
@@ -1517,9 +1669,19 @@ class SummarizeDataFrames():
         groupedDataFrames = self.groupedDataFrames
         summedDataFrames = self.summedDataFrames
         for i in groups:
-            for var in groupedDataFrames[i][0].columns:
-                summedDataFrames[i][var] = pd.Series([groupedDataFrames[i][j][var].mean() for j in range(len(groupedDataFrames[i]))])
-                summedDataFrames[i][f'delta{var}'] = pd.Series([groupedDataFrames[i][j][var].std() for j in range(len(groupedDataFrames[i]))])
+            group = groupedDataFrames[i]
+            nDataFrames = len(group)
+            sqrGroupVar = np.zeros(nDataFrames,dtype='object')
+            averages, stdevs, sqrStdevs = np.zeros(nDataFrames), np.zeros(nDataFrames), np.zeros(nDataFrames)
+            for var in group[0].columns:
+                for j in range(nDataFrames):
+                    averages[j] = group[j][var].mean()
+                    stdevs[j] = np.sqrt(group[j][var].std())
+                    sqrGroupVar[j] = group[j][var]**2
+                    sqrStdevs[j] = np.sqrt(sqrGroupVar[j].std())
+                summedDataFrames[i][var] = pd.Series(averages)
+                summedDataFrames[i][f'delta{var}'] = pd.Series(stdevs)
+                summedDataFrames[i][f'deltasqr{var}'] = pd.Series(sqrStdevs)
             summedDataFrames[i].sort_values(sort,ignore_index=True,inplace=True)
         self.summedDataFrames = summedDataFrames
     def Extract(self):
