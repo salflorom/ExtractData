@@ -727,6 +727,8 @@ class Chainbuild(Extract):
         createFigures = self.createFigures
         outFileName, createOutFile = self.outFile
         listInFiles = self.listInFiles
+        listLogFiles = self.listLogFiles
+        listNLogFiles = self.listNLogFiles
         sections = self.sections
         print(f'\tInput path: {path}')
         print(f'\tVariables to extract: {varsToExtract}')
@@ -738,6 +740,12 @@ class Chainbuild(Extract):
         print(f'\tInput files:')
         for i in range(len(listInFiles)):
             print(f'\t\t{listInFiles[i]}')
+        print(f'\tLog files:')
+        for i in range(len(listInFiles)):
+            print(f'\t\t{listLogFiles[i]}')
+        print(f'\tnLog files:')
+        for i in range(len(listInFiles)):
+            print(f'\t\t{listNLogFiles[i]}')
     def CallExtractors(self,inputFileName):
         varsToExtract = self.varsToExtract
         components = self.components
@@ -931,6 +939,59 @@ class Chainbuild(Extract):
                         print('Warning: Density was not found from Chainbuild'); density.append(np.nan)
                 break
         return pd.Series(density,index=range(len(density)))/sigma**3 #Angstrom^-3
+    def PlotVariables(self,outData,fileNumber,variable):
+        term = self.termalizationInPlots
+        dimensions = self.dimensions
+        outPath,outFileName,outExtension = self.outFilePath
+        if outPath: outPath += 'Figures/' #If output file is in a subdirectory.
+        else: outPath = 'Figures/' #If output file is not in a subdirectory.
+        os.makedirs(outPath, exist_ok=True)
+        if ('v' == variable): 
+            plt.figure()
+            outData['V[A^3]'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_V.pdf')
+        if ('t' == variable): 
+            plt.figure()
+            outData['T[K]'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_T.pdf')
+        if ('uff' == variable): 
+            plt.figure()
+            outData['Uff[K]'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Uff.pdf')
+        if ('usf' == variable): 
+            plt.figure()
+            outData['Usf[K]'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Usf.pdf')
+        if ('idmu' == variable): 
+            plt.figure()
+            outData['IdMu[K]'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_IdMu.pdf')
+        if ('mu' == variable): 
+            plt.figure()
+            outData['Mu[K]'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Mu.pdf')
+        if ('rho' == variable): 
+            plt.figure()
+            outData['Rho[A^-3]'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Rho.pdf')
+        if ('n' == variable): 
+            plt.figure()
+            outData['N'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_N.pdf')
+        if ('l' == variable): 
+            for dim in dimensions: 
+                plt.figure()
+                outData[f'Box-L[A] {dim}'][term:].plot(style='.',subplots=True,grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_L_{dim}.pdf')
     def PlotHistograms(self,outData,fileNumber,variable):
         term = self.termalizationInHists
         dimensions = self.dimensions
