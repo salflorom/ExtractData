@@ -60,6 +60,7 @@ class Extract():
         self.kernelDensity = False
         self.fileLines = self.fileNumber = 0
         self.fileName, self.dimLetter = '', ''
+        self.append = False
     def Flags(self):
         argv = self.argv
         printInputParams = self.printInputParams
@@ -77,6 +78,7 @@ class Extract():
         termalizationInPlots = self.termalizationInPlots
         termalizationInHists = self.termalizationInHists
         kernelDensity = self.kernelDensity
+        append = self.append
         for i in range(len(argv)):
             argv[i] = argv[i].lower()
             if (argv[i] == '-h'): self.Help()
@@ -89,6 +91,7 @@ class Extract():
             elif (argv[i] == '-o'): outFile = (argv[i+1],True)
             elif (argv[i] == '-ef'): termalizationInPlots = int(float(argv[i+1]))
             elif (argv[i] == '-eh'): termalizationInHists = int(float(argv[i+1]))
+            elif (argv[i] == '-append'): append = True
             elif (argv[i] == '-d'):
                 dimensions = []
                 for j in range(i+1,len(argv)):
@@ -133,6 +136,7 @@ class Extract():
         self.termalizationInPlots = termalizationInPlots
         self.termalizationInHists = termalizationInHists
         self.kernelDensity = kernelDensity
+        self.append = append
     def CreateDataFrame(self,outData):
         sort = self.sort
         keys = list(outData.keys())
@@ -146,11 +150,15 @@ class Extract():
                 outData.sort_values(findSortKey.group(),ignore_index=True,inplace=True); break
         return outData
     def CreateOutFile(self,outData,fileNumber):
+        append = self.append
         outPath, outFileName, outExtension = self.outFilePath
         if outPath: outPath = f'{outPath}dataFiles/' #If output file is in a subdirectory.
         else: outPath = 'dataFiles/' #If output file is not in a subdirectory.
         os.makedirs(outPath, exist_ok=True)
-        outData.to_csv(f'{outPath}{fileNumber}_{outFileName}{outExtension}',sep='\t',index=False,na_rep='NaN')
+        if append:
+            outData.to_csv(f'{outPath}{fileNumber}_{outFileName}{outExtension}',sep='\t',index=False,na_rep='NaN',mode='a',header=False)
+        else:
+            outData.to_csv(f'{outPath}{fileNumber}_{outFileName}{outExtension}',sep='\t',index=False,na_rep='NaN')
     def ReadOutputFile(self):
         outFile = self.outFile
         outFilePath = re.search(r'^(.+/)?(.+)(\..+)$',outFile[0])
@@ -244,6 +252,7 @@ class Raspa(Extract):
         units['pressure'] = 'Pa'
         units['charge'] = 'a.u.'
         units['density'] = 'kg/m$^3$'
+        units['henry'] = 'mol/kg/Pa'
         self.units = units
     def PrintInputParameters(self):
         path = self.path
@@ -255,6 +264,7 @@ class Raspa(Extract):
         listInFiles = self.listInFiles
         components = self.components
         sections = self.sections
+        append = self.append
         print(f'\tInput path: {path}')
         print(f'\tVariables to extract: {varsToExtract}')
         print(f'\tFluid components: {components}')
@@ -263,6 +273,7 @@ class Raspa(Extract):
         print(f'\tBox dimensions: {dimensions}')
         print(f'\tCreate figures: {createFigures}')
         print(f'\tCreate output file: {createOutFile}')
+        print(f'\tAppend new data to collected data: {append}')
         print( '\tInput files:')
         for i in range(len(listInFiles)): print(f'\t\t{listInFiles[i]}')
     def CallExtractors(self,fileName):
@@ -325,6 +336,10 @@ class Raspa(Extract):
             unit = units['density']
             for comp in components:
                 outData[f'Rho[{unit}] {comp}'] = self.ExtractDensities(fileLines,comp)
+        if ('kh' in varsToExtract):
+            unit = units['henry']
+            for i in range(len(components)):
+                outData[f'KH[{unit}] {components[i]}'] = self.ExtractHenryCoefficients(fileLines,i)
         if ('n' in varsToExtract):
             for comp in components:
                 outData[f'N {comp}'] = self.ExtractNumberOfMolecules(fileLines,comp)
@@ -333,6 +348,23 @@ class Raspa(Extract):
             for dim in dimensions:
                 outData[f'Box-L[{unit}] {dim}'] = self.ExtractBoxLengths(fileLines,dim)
         return outData
+    def ExtractHenryCoefficients(self,fileLines,ithComp):
+        sections = self.sections
+        coefs = []
+        print('Extracting Henry coefficients.')
+        for line in range(len(fileLines)):
+            findHenrysCoef = re.search('^Henry coefficients',fileLines[line])
+            if findHenrysCoef:
+                for subline in range(line+1,len(fileLines)):
+                    findCoef = re.search(f'Component\s+{ithComp}:\s+(\d+\.?\d*)\s+\[',fileLines[subline])
+                    if findCoef:
+                        value = float(findCoef.group(1))
+                        if (value == 0): break
+                        coefs.append(value)
+                        break
+        if (len(coefs) == 0):
+            print('Warning: No Henry coefficient was found from RASPA.'); coefs.append(np.nan)
+        return pd.Series(coefs,index=range(len(coefs)))
     def ExtractVolumes(self,fileLines):
         sections = self.sections
         volumes = []
@@ -739,6 +771,14 @@ class Raspa(Extract):
                 plt.xlabel('$N$')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_N_{comp}.pdf')
+        if ('kh' == variable):
+            for comp in components:
+                plt.figure()
+                sns.histplot(data=outData[f'KH[mol/kg/Pa] {comp}'][term:],bins=50,discrete=False,stat='probability')
+                if kde: sns.kdeplot(data=outData[f'KH[mol/kg/Pa] {comp}'][term:],bw_adjust=3,color='r',linewidth=5)
+                plt.xlabel('$K_H$[mol/kg/Pa]')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_KH_{comp}.pdf')
         if ('l' == variable):
             for dim in dimensions:
                 plt.figure()
@@ -840,6 +880,14 @@ class Raspa(Extract):
                 plt.ylabel(f'N {comp}')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-N_{comp}.pdf')
+        if ('kh' == variable):
+            unit = units['henry']
+            for comp in components:
+                plt.figure()
+                outData[f'KH[{unit}] {comp}'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+                plt.ylabel(f'$K_H$[{unit}]')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_KH_{comp}.pdf')
         if ('mu' == variable):
             unit = units['energy']
             plt.figure()
