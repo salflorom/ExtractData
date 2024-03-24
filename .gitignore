@@ -1,2 +1,7 @@
+*.pdf
+*.out
+*.csv
 *.swp
+
+groupedData
 __pycache__
