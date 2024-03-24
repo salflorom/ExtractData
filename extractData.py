@@ -186,6 +186,7 @@ class Extract():
         for i in range(len(listInFiles)):
             print('\nExtracting data...')
             outData = self.CallExtractors(listInFiles[i]) # From derived class.
+            print(outData)
             print('\nOrganizing data...')
             outData = self.CreateDataFrame(outData)
             print(outData)
@@ -903,6 +904,316 @@ class Raspa(Extract):
                 plt.ylabel(f'L[{unit}] {dim}')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-L_{dim}.pdf')
+class MCPorousMaterials(Extract):
+    def __init__(self): 
+        Extract.__init__(self,argv)
+        self.listLogFiles = []
+        self.unitStyle = ''
+        self.ReadUnits()
+    def FindComponents(self,inputFileName):
+        components = []
+        with open(inputFileName,'r') as inputFile: fileLines = inputFile.readlines()
+        for line in range(len(fileLines)):
+            findComponent = re.search('FluidName\s+(.+);',fileLines[line], re.I)
+            if findComponent: components.append(findComponent.group(1).lower())
+        self.components = components
+    def ReadInputFiles(self):
+        path = self.path
+        listInputFiles, listLogFiles = [], []
+        molFileFound = False 
+        for root, dirs, files in os.walk(path):
+            for fileName in files:
+                if fileName.endswith('.inp'): listInputFiles.append(os.path.join(root, fileName))
+                elif fileName.endswith('.log'): listLogFiles.append(os.path.join(root, fileName))
+        if len(listInputFiles) == 0: print('Error: Input file not found. Exiting.'); exit(2)
+        listInputFiles.sort(), listLogFiles.sort()
+        self.listInFiles = listInputFiles
+        self.listLogFiles = listLogFiles
+        self.FindComponents(listInputFiles[0])
+    def ReadUnits(self):
+        units = {}
+        unitStyle = 'generic'
+        units['mass'] = 'g/mol'
+        units['distance'] = 'A'
+        units['volume'] = 'A$^3$'
+        units['energy'] = 'K'
+        units['temperature'] = 'K'
+        units['pressure'] = 'Pa'
+        units['density'] = 'g/cm$^3$'
+        self.units = units
+        self.unitStyle = unitStyle
+    def PrintInputParameters(self):
+        path = self.path
+        varsToExtract = self.varsToExtract
+        sort = self.sort
+        createFigures = self.createFigures
+        outFileName, createOutFile = self.outFile
+        listInFiles = self.listInFiles
+        listLogFiles = self.listLogFiles
+        components = self.components
+        print(f'\tInput path: {path}')
+        print(f'\tVariables to extract: {varsToExtract}')
+        print(f'\tSort variables according to: {sort}')
+        print(f'\tFluid components: {components}')
+        print(f'\tCreate figures: {createFigures}')
+        print(f'\tCreate output file: {createOutFile}')
+        print(f'\tInput files:')
+        for i in range(len(listInFiles)):
+            print(f'\t\t{listInFiles[i]}')
+        print(f'\tLog files:')
+        for i in range(len(listLogFiles)):
+            print(f'\t\t{listLogFiles[i]}')
+    def ReadOutputFile(self, fileName):
+        outFile = self.outFile
+        box = re.search('.+/(box\d*)/.+', fileName).group(1)
+        outFilePath = re.search(r'^(.+/)?(.+)(\..+)$',outFile[0])
+        outFileName = f'{box}_{outFilePath.group(2)}'
+        if not outFilePath.group(3): 
+            outFilePath = (outFilePath.group(1), outFileName, '.dat')
+        else: outFilePath = (outFilePath.group(1), outFileName, outFilePath.group(3))
+        self.outFilePath = outFilePath
+        return outFilePath
+    def ExtractData(self):
+        listLogFiles = self.listLogFiles
+        varsToExtract = self.varsToExtract
+        histsToExtract = self.histsToExtract
+        createFigures = self.createFigures
+        outFileName, createOutFile = self.outFile
+        components = self.components
+        for comp in components:
+            for i in range(len(listLogFiles)):
+                if re.search(f'simulation_{comp}', listLogFiles[i]):
+                    print('\nExtracting data...')
+                    outData = self.CallExtractors(listLogFiles[i]) # From derived class.
+                    print('\nOrganizing data...')
+                    outData = self.CreateDataFrame(outData)
+                    print(outData)
+                    print(outData.describe())
+                    if createOutFile:
+                        outPath, outFileName, outExtension = self.ReadOutputFile(listLogFiles[i])
+                        if outPath:
+                            print(f'\nCreating output file: {outPath}dataFiles/{i}_{comp}_{outFileName}{outExtension} ...')
+                        else: 
+                            print(f'\nCreating output file: dataFiles/{i}_{comp}_{outFileName}{outExtension} ...')
+                        self.CreateOutFile(outData,i)
+                        if createFigures: 
+                            print('\nCreating figures...')
+                            for j in varsToExtract: 
+                                self.PlotVariables(outData,i,j,comp)
+                                print(f'\t{outPath}Figures/{i}_{outFileName}_{j.upper()}_{comp} ...')
+                    else:
+                        if createFigures: 
+                            _ = self.ReadOutputFile()
+                            print('\nCreating figures...')
+                            for j in varsToExtract: 
+                                self.PlotVariables(outData,i,j,comp)
+                                print(f'\tFigures/{i}_{outFileName}_{j.upper()}_{comp} ...')
+                    if histsToExtract:
+                        outPath, outFileName, outExtension = self.ReadOutputFile(listLogFiles[i])
+                        print(f'\nCreating histograms...')
+                        if outPath:
+                            for j in histsToExtract: 
+                                self.PlotHistograms(outData,i,j,comp)
+                                print(f'\t{outPath}histograms/{i}_{outFileName}_{j.upper()}_{comp} ...')
+                        else: 
+                            for j in histsToExtract: 
+                                self.PlotHistograms(outData,i,j,comp)
+                                print(f'\thistograms/{i}_{outFileName}_{j.upper()}_{comp} ...')
+                    print(f'\nNormal termination for file {listLogFiles[i]}')
+        print(f'\nNormal termination.')
+        exit(0)
+    def CallExtractors(self, fileName): #Check for pressures!
+        varsToExtract = self.varsToExtract
+        components = self.components
+        units = self.units
+        outData = {}
+        dataFrame = pd.read_csv(fileName, delimiter='\t')
+        if ('s' in varsToExtract):
+            outData['Set'] = dataFrame['Set']
+        if ('v' in varsToExtract):
+            unit = units['volume']
+            outData[f'V[{unit}]'] = dataFrame['Volume[AA^3]']
+        if ('t' in varsToExtract):
+            unit = units['temperature']
+            outData[f'T[{unit}]'] = dataFrame['Temp[K]']
+        if ('p' in varsToExtract):
+            unit = units['pressure']
+            outData[f'P[{unit}]'] = self.ExtractPressures(fileName)
+        if ('u' in varsToExtract):
+            unit = units['energy']
+            outData['U[K]'] = dataFrame['E/particle[K]']
+        if ('uff' in varsToExtract):
+            unit = units['energy']
+            outData['Uff[K]'] = dataFrame['ffE/particle[K]']
+        if ('usf' in varsToExtract):
+            unit = units['energy']
+            outData['Usf[K]'] = dataFrame['sfE/particle[K]']
+        if ('mu' in varsToExtract):
+            unit = units['energy']
+            outData[f'Mu[{unit}]'] = dataFrame['mu[K]']
+        if ('exmu' in varsToExtract):
+            unit = units['energy']
+            outData[f'ExMu[{unit}]'] = dataFrame['muEx[K]']
+        if ('n' in varsToExtract): outData['N'] = dataFrame['NParts']
+        if ('rho' in varsToExtract):
+            unit = units['density']
+            outData[f'Rho[{unit}]'] = dataFrame['Dens[g/cm^3]']
+        if ('l' in varsToExtract):
+            unit = units['distance']
+            dim = 'x'
+            outData[f'L[{unit}] {dim}'] = dataFrame[f'width[AA]']
+        return outData
+    def ExtractPressures(self,fileName):
+        units = self.units['pressure']
+        pressures = []
+        print('Warning: MC-PorousMaterials does not print pressures. Attempting to extract fixed external pressure from path.')
+        pressure = re.search(f'.+_(\d+\.\d*)pa/',fileName)
+        pressures.append(float(pressure.group(1)))
+        return pd.Series(pressures,index=range(len(pressures)))
+    def PlotVariables(self, outData, fileNumber, variable, comp):
+        term = self.termalizationInPlots
+        dimensions = self.dimensions
+        units = self.units
+        outPath,outFileName,outExtension = self.outFilePath
+        if outPath: outPath += 'Figures/' #If output file is in a subdirectory.
+        else: outPath = 'Figures/' #If output file is not in a subdirectory.
+        os.makedirs(outPath, exist_ok=True)
+        if ('v' == variable):
+            unit = units['volume']
+            plt.figure()
+            outData[f'V[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
+            plt.ylabel(f'V[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-V.pdf')
+        if ('t' == variable):
+            unit = units['temperature']
+            plt.figure()
+            outData[f'T[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.ylabel(f'T[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-T.pdf')
+        if ('p' == variable):
+            unit = units['pressure']
+            plt.figure()
+            outData[f'P[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.ylabel(f'P[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-P.pdf')
+        if ('u' == variable):
+            unit = units['energy']
+            plt.figure()
+            outData[f'U[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.ylabel(f'U[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-U.pdf')
+        if ('rho' == variable):
+            unit = units['density']
+            plt.figure()
+            outData[f'Rho[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.ylabel(f'$\\rho$[{unit}] ({comp})')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Rho_{comp}.pdf')
+        if ('n' == variable):
+            plt.figure()
+            outData[f'N'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.ylabel(f'N {comp}')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-N_{comp}.pdf')
+        if ('mu' == variable):
+            unit = units['energy']
+            plt.figure()
+            outData[f'Mu[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.ylabel(f'$\mu$[{unit}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Mu.pdf')
+        if ('l' == variable):
+            unit = units['distance']
+            dim = 'x'
+            plt.figure()
+            outData[f'L[{unit}] {dim}'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.ylabel(f'L[{unit}] {dim}')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-L_{dim}.pdf')
+    def PlotHistograms(self,outData,fileNumber,variable, comp):
+        term = self.termalizationInHists
+        components = self.components
+        dimensions = self.dimensions
+        units = self.units
+        outPath,outFileName,outExtension = self.outFilePath
+        kde = self.kernelDensity
+        if outPath: outPath += 'histograms/' #If output file is in a subdirectory.
+        else: outPath = 'histograms/' #If output file is not in a subdirectory.
+        os.makedirs(outPath, exist_ok=True)
+        if ('v' == variable):
+            plt.figure()
+            sns.histplot(data=outData['V[A^3]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['V[A^3]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$V$[A$^3$]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_V.pdf')
+        if ('t' == variable):
+            plt.figure()
+            sns.histplot(data=outData['T[K]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['T[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$T$[K]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_T.pdf')
+        if ('p' == variable):
+            plt.figure()
+            sns.histplot(data=outData[f'P[{units}]]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'P[{units}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel(f'$P$[{units}]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_P.pdf')
+        if ('u' == variable):
+            plt.figure()
+            sns.histplot(data=outData['U[K]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['U[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$U$[K]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_U.pdf')
+        if ('mu' == variable):
+            plt.figure()
+            sns.histplot(data=outData['Mu[K]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['Mu[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$\mu$[K]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Mu_{comp}.pdf')
+        if ('idmu' == variable):
+            plt.figure()
+            sns.histplot(data=outData['IdMu[K]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['IdMu[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$\mu_{\\rm id}$[K]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_IdMu_{comp}.pdf')
+        if ('exmu' == variable):
+            plt.figure()
+            sns.histplot(data=outData[f'ExMu[K]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['T[K]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$\mu_{\\rm ex}$[K]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_ExMu_{comp}.pdf')
+        if ('rho' == variable):
+            plt.figure()
+            sns.histplot(data=outData[f'Rho[kg/mol]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'Rho[kg/mol]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$\\rho$[kg/mol]')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Rho_{comp}.pdf')
+        if ('n' == variable):
+            plt.figure()
+            sns.histplot(data=outData[f'N'][term:],bins=50,discrete=True,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'N'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$N$')
+            plt.tight_layout()
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_N_{comp}.pdf')
+        if ('l' == variable):
+            dim = 'x'
+            plt.figure()
+            sns.histplot(data=outData[f'Box-L[A] {dim}'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'Box-L[A] {dim}'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel(f'Box-L[A] {dim}')
+            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_L_{dim}.pdf')
 class Chainbuild(Extract):
     def __init__(self):
         Extract.__init__(self,argv)
@@ -1659,6 +1970,7 @@ class LAMMPS(Extract):
                         nRows = subline
                         break
                 break
+        if not findDataHeader: exit(f'No header found for file {fileName}. Exiting program.')
         if not findDataFooter:
             print('Ending of simulation not found. Proceeding analysis with present data.')
             dataFrame = pd.read_csv(path+fileName, engine='python', delimiter='\s+', skiprows=headerLine)
@@ -1703,6 +2015,7 @@ class LAMMPS(Extract):
         term = self.termalizationInHists
         dimensions = self.dimensions
         units = self.units
+        kde = self.kernelDensity
         outPath,outFileName,outExtension = self.outFilePath
         if outPath: outPath += 'histograms/' #If output file is in a subdirectory.
         else: outPath = 'histograms/' #If output file is not in a subdirectory.
@@ -1710,41 +2023,47 @@ class LAMMPS(Extract):
         if ('v' == variable):
             unit = units['volume']
             plt.figure()
-            outData[f'V[{unit}]'][term:].plot(bins=50,kind='hist')
-            plt.xlabel('V[{unit}]')
+            sns.histplot(data=outData[f'V[{unit}]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'V[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel(f'V[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-V.pdf')
         if ('t' == variable):
             unit = units['temperature']
             plt.figure()
-            outData[f'T[{unit}]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData[f'T[{unit}]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'T[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
             plt.xlabel(f'T[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-T.pdf')
         if ('p' == variable):
             unit = units['pressure']
             plt.figure()
-            outData[f'P[{unit}]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData[f'P[{unit}]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'P[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
             plt.xlabel(f'P[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-P.pdf')
         if ('u' == variable):
             unit = units['energy']
             plt.figure()
-            outData[f'U[{unit}]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData[f'U[{unit}]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'U[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
             plt.xlabel(f'U[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-U.pdf')
         if ('rho' == variable):
             unit = units['density']
             plt.figure()
-            outData[f'Rho[{unit}]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData[f'Rho[{unit}]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'Rho[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
             plt.xlabel(f'Rho[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Rho.pdf')
         if ('n' == variable):
             plt.figure()
-            outData['N'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData['N'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['N'][term:],bw_adjust=3,color='r',linewidth=5)
             plt.xlabel('N')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-N.pdf')
@@ -1752,12 +2071,14 @@ class LAMMPS(Extract):
             unit = units['distance']
             for dim in dimensions:
                 plt.figure()
-                outData[f'L[{unit}] {dim}'][term:].plot(bins=50,kind='hist')
+                sns.histplot(data=outData[f'L[{unit}] {dim}'][term:],bins=50,discrete=False,stat='probability')
+                if kde: sns.kdeplot(data=outData[f'L[{unit}] {dim}'][term:],bw_adjust=3,color='r',linewidth=5)
                 plt.xlabel(f'L[{unit}] {dim}')
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-L_{dim}.pdf')
         if ('_' in variable):
             plt.figure()
-            outData[f'{variable}'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData[f'{variable}'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'{variable}'][term:],bw_adjust=3,color='r',linewidth=5)
             plt.xlabel(f'{variable}')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-{variable}.pdf')
@@ -2038,10 +2359,11 @@ if __name__ == '__main__':
     if re.search(r'-h+',argvString.lower()): Help()
     print('\nChecking simulation program...')
     extract = 0
-    checkMotor = re.search(r'-m\s+(\w+)\s+',argvString.lower())
+    checkMotor = re.search(r'-m\s+([\w-]+)\s+',argvString.lower())
     if checkMotor:
         motor = checkMotor.group(1)
         if motor == 'raspa': print('RASPA'); extract = Raspa()
+        elif motor == 'mc-porousmaterials': print('MC-PorousMaterials'); extract = MCPorousMaterials()
         elif motor == 'chainbuild': print('Chainbuild'); extract = Chainbuild()
         elif motor == 'gomc': print('GOMC'); extract = GOMC()
         elif motor == 'lammps': print('LAMMPS'); extract = LAMMPS()
