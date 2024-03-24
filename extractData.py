@@ -1659,6 +1659,7 @@ class LAMMPS(Extract):
                         nRows = subline
                         break
                 break
+        if not findDataHeader: exit(f'No header found for file {fileName}. Exiting program.')
         if not findDataFooter:
             print('Ending of simulation not found. Proceeding analysis with present data.')
             dataFrame = pd.read_csv(path+fileName, engine='python', delimiter='\s+', skiprows=headerLine)
@@ -1703,6 +1704,7 @@ class LAMMPS(Extract):
         term = self.termalizationInHists
         dimensions = self.dimensions
         units = self.units
+        kde = self.kernelDensity
         outPath,outFileName,outExtension = self.outFilePath
         if outPath: outPath += 'histograms/' #If output file is in a subdirectory.
         else: outPath = 'histograms/' #If output file is not in a subdirectory.
@@ -1710,41 +1712,47 @@ class LAMMPS(Extract):
         if ('v' == variable):
             unit = units['volume']
             plt.figure()
-            outData[f'V[{unit}]'][term:].plot(bins=50,kind='hist')
-            plt.xlabel('V[{unit}]')
+            sns.histplot(data=outData[f'V[{unit}]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'V[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel(f'V[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-V.pdf')
         if ('t' == variable):
             unit = units['temperature']
             plt.figure()
-            outData[f'T[{unit}]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData[f'T[{unit}]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'T[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
             plt.xlabel(f'T[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-T.pdf')
         if ('p' == variable):
             unit = units['pressure']
             plt.figure()
-            outData[f'P[{unit}]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData[f'P[{unit}]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'P[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
             plt.xlabel(f'P[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-P.pdf')
         if ('u' == variable):
             unit = units['energy']
             plt.figure()
-            outData[f'U[{unit}]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData[f'U[{unit}]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'U[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
             plt.xlabel(f'U[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-U.pdf')
         if ('rho' == variable):
             unit = units['density']
             plt.figure()
-            outData[f'Rho[{unit}]'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData[f'Rho[{unit}]'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'Rho[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
             plt.xlabel(f'Rho[{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Rho.pdf')
         if ('n' == variable):
             plt.figure()
-            outData['N'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData['N'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData['N'][term:],bw_adjust=3,color='r',linewidth=5)
             plt.xlabel('N')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-N.pdf')
@@ -1752,12 +1760,14 @@ class LAMMPS(Extract):
             unit = units['distance']
             for dim in dimensions:
                 plt.figure()
-                outData[f'L[{unit}] {dim}'][term:].plot(bins=50,kind='hist')
+                sns.histplot(data=outData[f'L[{unit}] {dim}'][term:],bins=50,discrete=False,stat='probability')
+                if kde: sns.kdeplot(data=outData[f'L[{unit}] {dim}'][term:],bw_adjust=3,color='r',linewidth=5)
                 plt.xlabel(f'L[{unit}] {dim}')
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-L_{dim}.pdf')
         if ('_' in variable):
             plt.figure()
-            outData[f'{variable}'][term:].plot(bins=50,kind='hist')
+            sns.histplot(data=outData[f'{variable}'][term:],bins=50,discrete=False,stat='probability')
+            if kde: sns.kdeplot(data=outData[f'{variable}'][term:],bw_adjust=3,color='r',linewidth=5)
             plt.xlabel(f'{variable}')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-{variable}.pdf')
