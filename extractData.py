@@ -50,9 +50,12 @@ class Extract():
         self.sort = 'P'
         self.sections = ['init','prod']
         self.dimensions = ['x','y','z']
+        self.angles = ['alpha','beta','gamma']
+        self.boxVectors = ['a','b','c']
         self.boxes = [0]
         self.varsToExtract = ['N']
         self.histsToExtract = []
+        self.figuresToExtract = []
         self.termalizationInPlots, self.termalizationInHists = 0, 0
         self.components, self.listInFiles, self.outFilePath = [], [], []
         self.outFile = ('outData.dat',False)
@@ -70,10 +73,13 @@ class Extract():
         sort = self.sort
         outFile = self.outFile
         dimensions = self.dimensions
+        angles = self.angles
+        boxVectors = self.boxVectors
         components = self.components
         boxes = self.boxes
         varsToExtract = self.varsToExtract
         histsToExtract = self.histsToExtract
+        figuresToExtract = self.figuresToExtract
         sections = self.sections
         termalizationInPlots = self.termalizationInPlots
         termalizationInHists = self.termalizationInHists
@@ -83,7 +89,6 @@ class Extract():
             argv[i] = argv[i].lower()
             if (argv[i] == '-h'): self.Help()
             elif (argv[i] == '-p'): printInputParams = True
-            elif (argv[i] == '-f'): createFigures = True
             elif (argv[i] == '-kde'): kernelDensity = True
             elif (argv[i] == '-i'): path = argv[i+1]
             elif (argv[i] == '-u'): units = argv[i+1]
@@ -97,6 +102,16 @@ class Extract():
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
                     dimensions.append(argv[j])
+            elif (argv[i] == '-a'):
+                angles = []
+                for j in range(i+1,len(argv)):
+                    if (argv[j][0] == '-'): break
+                    angles.append(argv[j])
+            elif (argv[i] == '-bv'):
+                boxVectors = []
+                for j in range(i+1,len(argv)):
+                    if (argv[j][0] == '-'): break
+                    boxVectors.append(argv[j])
             elif (argv[i] == '-c'):
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
@@ -121,6 +136,11 @@ class Extract():
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
                     histsToExtract.append(argv[j].lower())
+            elif (argv[i] == '-f'):
+                figuresToExtract = []
+                for j in range(i+1,len(argv)):
+                    if (argv[j][0] == '-'): break
+                    figuresToExtract.append(argv[j].lower())
         self.printInputParams = printInputParams
         self.createFigures = createFigures
         self.path = path
@@ -128,10 +148,13 @@ class Extract():
         self.sort = sort
         self.outFile = outFile
         self.dimensions = dimensions
+        self.angles = angles
+        self.boxVectors = boxVectors
         self.components = components
         self.boxes = boxes
         self.varsToExtract = varsToExtract
         self.histsToExtract = histsToExtract
+        self.figuresToExtract = figuresToExtract
         self.sections = sections
         self.termalizationInPlots = termalizationInPlots
         self.termalizationInHists = termalizationInHists
@@ -181,12 +204,12 @@ class Extract():
         listInFiles = self.listInFiles
         varsToExtract = self.varsToExtract
         histsToExtract = self.histsToExtract
+        figuresToExtract = self.figuresToExtract
         createFigures = self.createFigures
         outFileName, createOutFile = self.outFile
         for i in range(len(listInFiles)):
             print('\nExtracting data...')
             outData = self.CallExtractors(listInFiles[i]) # From derived class.
-            print(outData)
             print('\nOrganizing data...')
             outData = self.CreateDataFrame(outData)
             print(outData)
@@ -203,11 +226,15 @@ class Extract():
                     for j in varsToExtract:
                         self.PlotVariables(outData,i,j)
                         print(f'\t{outPath}Figures/{i}_{outFileName}_{j.upper()} ...')
-            else:
-                if createFigures:
-                    _ = self.ReadOutputFile()
-                    print('\nCreating figures...')
-                    for j in varsToExtract:
+            if figuresToExtract:
+                outPath, outFileName, outExtension = self.ReadOutputFile()
+                print('\nCreating figures...')
+                if outPath:
+                    for j in figuresToExtract:
+                        self.PlotVariables(outData,i,j)
+                        print(f'\t{outPath}Figures/{i}_{outFileName}_{j.upper()} ...')
+                else:
+                    for j in figuresToExtract:
                         self.PlotVariables(outData,i,j)
                         print(f'\tFigures/{i}_{outFileName}_{j.upper()} ...')
             if histsToExtract:
@@ -245,14 +272,15 @@ class Raspa(Extract):
     def ReadUnits(self):
         units = {}
         units['mass'] = 'a.u.'
-        units['distance'] = '\\r{A}'
-        units['volume'] = '\\r{A}$^3$'
+        units['angle'] = 'degrees'
+        units['distance'] = 'A'
+        units['volume'] = 'A^3'
         units['time'] = 'ps'
         units['energy'] = 'K'
         units['temperature'] = 'K'
         units['pressure'] = 'Pa'
         units['charge'] = 'a.u.'
-        units['density'] = 'kg/m$^3$'
+        units['density'] = 'kg/m^3'
         units['henry'] = 'mol/kg/Pa'
         self.units = units
     def PrintInputParameters(self):
@@ -260,6 +288,8 @@ class Raspa(Extract):
         varsToExtract = self.varsToExtract
         sort = self.sort
         dimensions = self.dimensions
+        angles = self.angles
+        boxVectors = self.boxVectors
         createFigures = self.createFigures
         outFileName, createOutFile = self.outFile
         listInFiles = self.listInFiles
@@ -272,6 +302,8 @@ class Raspa(Extract):
         print(f'\tSort variables according to: {sort}')
         print(f'\tSections to analyze: {sections}')
         print(f'\tBox dimensions: {dimensions}')
+        print(f'\tBox angles: {angles}')
+        print(f'\tBox vectors: {boxVectors}')
         print(f'\tCreate figures: {createFigures}')
         print(f'\tCreate output file: {createOutFile}')
         print(f'\tAppend new data to collected data: {append}')
@@ -282,6 +314,8 @@ class Raspa(Extract):
         varsToExtract = self.varsToExtract
         components = self.components
         dimensions = self.dimensions
+        angles = self.angles
+        boxVectors = self.boxVectors
         units = self.units
         outData = {}
         with open(path+fileName,'r') as fileContent: fileLines = fileContent.readlines()
@@ -347,7 +381,17 @@ class Raspa(Extract):
         if ('l' in varsToExtract):
             unit = units['distance']
             for dim in dimensions:
-                outData[f'Box-L[{unit}] {dim}'] = self.ExtractBoxLengths(fileLines,dim)
+                outData[f'L_{dim}[{unit}]'] = self.ExtractBoxLengths(fileLines,dim)
+        if ('a' in varsToExtract):
+            unit = units['angle']
+            for ang in angles:
+                outData[f'{ang}[{unit}]'] = self.ExtractBoxAngles(fileLines,ang)
+        if ('bl' in varsToExtract):
+            unit = units['distance']
+            df = self.ExtractBoxVectors(fileLines)
+            outData[f'a_x[{unit}]'], outData[f'a_y[{unit}]'], outData[f'a_z[{unit}]'] = df[0], df[1], df[2]
+            outData[f'b_x[{unit}]'], outData[f'b_y[{unit}]'], outData[f'b_z[{unit}]'] = df[3], df[4], df[5]
+            outData[f'c_x[{unit}]'], outData[f'c_y[{unit}]'], outData[f'c_z[{unit}]'] = df[6], df[7], df[8]
         return outData
     def ExtractHenryCoefficients(self,fileLines,ithComp):
         sections = self.sections
@@ -547,13 +591,35 @@ class Raspa(Extract):
         for sec in sections:
             if (sec.lower() == 'init'):
                 for line in range(len(fileLines)):
-                    findLength = re.search('Box-lengths:\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+Box-angles',fileLines[line])
+                    findLength = re.search('Box-lengths:\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+Box-lengths',fileLines[line])
                     if findLength: boxLengths.append(float(findLength.group(dimension[dimLetter]))) #A
             if (sec.lower() == 'prod'):
                 for line in range(len(fileLines)):
                     findLength = re.search('Box-lengths:\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+(\d+\.?\d*).+Average',fileLines[line])
                     if findLength: boxLengths.append(float(findLength.group(dimension[dimLetter]))) #A
         return pd.Series(boxLengths,index=range(len(boxLengths)))
+    def ExtractBoxAngles(self,fileLines,dimLetter):
+        dimension = {'alpha':1,'beta':2,'gamma':3}
+        boxLengths = []
+        for line in range(len(fileLines)):
+            findLength = re.search('Box-angles:\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+(\d+\.?\d*).+Average',fileLines[line])
+            if findLength: boxLengths.append(float(findLength.group(dimension[dimLetter]))) #A
+        return pd.Series(boxLengths,index=range(len(boxLengths)))
+    def ExtractBoxVectors(self,fileLines):
+        boxVectorAx, boxVectorAy, boxVectorAz = [], [], []
+        boxVectorBx, boxVectorBy, boxVectorBz = [], [], []
+        boxVectorCx, boxVectorCy, boxVectorCz = [], [], []
+        for line in range(len(fileLines)):
+            findBoxVectors = re.search('Current Box:',fileLines[line])
+            if findBoxVectors: 
+                vectorA = re.search('Current Box:\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*).+Average',fileLines[line])
+                vectorB = re.search('\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*).+\[',fileLines[line+1])
+                vectorC = re.search('\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*).+\[',fileLines[line+2])
+                boxVectorAx.append(float(vectorA.group(1))); boxVectorAy.append(float(vectorA.group(2))); boxVectorAz.append(float(vectorA.group(3)))
+                boxVectorBx.append(float(vectorB.group(1))); boxVectorBy.append(float(vectorB.group(2))); boxVectorBz.append(float(vectorB.group(3)))
+                boxVectorCx.append(float(vectorC.group(1))); boxVectorCy.append(float(vectorC.group(2))); boxVectorCz.append(float(vectorC.group(3)))
+        tmp = np.array([boxVectorAx,boxVectorAy,boxVectorAz,boxVectorBx,boxVectorBy,boxVectorBz,boxVectorCx,boxVectorCy,boxVectorCz]).T
+        return pd.DataFrame(tmp,index=range(len(tmp)))
     def ExtractNumberOfMolecules(self,fileLines,component):
         sections = self.sections
         nMolecules = []
@@ -656,6 +722,7 @@ class Raspa(Extract):
         term = self.termalizationInHists
         components = self.components
         dimensions = self.dimensions
+        angles = self.angles
         units = self.units
         outPath,outFileName,outExtension = self.outFilePath
         kde = self.kernelDensity
@@ -663,105 +730,119 @@ class Raspa(Extract):
         else: outPath = 'histograms/' #If output file is not in a subdirectory.
         os.makedirs(outPath, exist_ok=True)
         if ('v' == variable):
+            unit = units['volume']
             plt.figure()
-            sns.histplot(data=outData['V[A^3]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['V[A^3]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$V$[A$^3$]')
+            sns.histplot(data=outData[f'V[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'V[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$V$ [\\r{A}$^3$]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_V.pdf')
         if ('t' == variable):
+            unit = units['temperature']
             plt.figure()
-            sns.histplot(data=outData['T[K]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['T[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$T$[K]')
+            sns.histplot(data=outData[f'T[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'T[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$T$ [K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_T.pdf')
         if ('p' == variable):
+            unit = units['pressure']
             plt.figure()
-            sns.histplot(data=outData[f'P[{units}]]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData[f'P[{units}]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel(f'$P$[{units}]')
+            sns.histplot(data=outData[f'P[{unit}]]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'P[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel(f'$P$ [{units}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_P.pdf')
         if ('u' == variable):
+            unit = units['energy']
             plt.figure()
-            sns.histplot(data=outData['U[K]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['U[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$U$[K]')
+            sns.histplot(data=outData[f'U[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'U[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$U$ [K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_U.pdf')
         if ('uhh' == variable):
+            unit = units['energy']
             plt.figure()
-            sns.histplot(data=outData['Uhh[K]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['Uhh[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$U$(host-host)[K]')
+            sns.histplot(data=outData[f'Uhh[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'Uhh[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$U$ (host-host) [K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Uhh.pdf')
         if ('uhg' == variable):
+            unit = units['energy']
             plt.figure()
-            sns.histplot(data=outData['Uhg[K]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['Uhg[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$U$(host-adsorbate)[K]')
+            sns.histplot(data=outData[f'Uhg[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'Uhg[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$U$ (host-adsorbate) [K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Uhg.pdf')
         if ('uhc' == variable):
+            unit = units['energy']
             plt.figure()
-            sns.histplot(data=outData['Uhc[K]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['Uhc[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$U$(host-cation)[K]')
+            sns.histplot(data=outData[f'Uhc[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'Uhc[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$U$ (host-cation) [K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Uhc.pdf')
         if ('ugg' == variable):
+            unit = units['energy']
             plt.figure()
-            sns.histplot(data=outData['Ugg[K]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['Ugg[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$U$(adsorbate-adsorbate)[K]')
+            sns.histplot(data=outData[f'Ugg[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'Ugg[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$U$ (adsorbate-adsorbate) [K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Ugg.pdf')
         if ('ucc' == variable):
+            unit = units['energy']
             plt.figure()
-            sns.histplot(data=outData['Ucc[K]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['Ucc[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$U$(cation-cation)[K]')
+            sns.histplot(data=outData[f'Ucc[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'Ucc[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$U$ (cation-cation) [K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Ucc.pdf')
         if ('ugc' == variable):
+            unit = units['energy']
             plt.figure()
-            sns.histplot(data=outData['Ugc[K]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['Ugc[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$U$(adsorbate-cation)[K]')
+            sns.histplot(data=outData[f'Ugc[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'Ugc[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$U$ (adsorbate-cation) [K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Ugc.pdf')
         if ('mu' == variable):
+            unit = units['energy']
             for comp in components:
                 plt.figure()
-                sns.histplot(data=outData['Mu[K]'][term:],bins=50,discrete=False,stat='probability')
-                if kde: sns.kdeplot(data=outData['Mu[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-                plt.xlabel('$\mu$[K]')
+                sns.histplot(data=outData[f'Mu[{unit}]'][term:],bins=50,discrete=False,stat='density')
+                if kde: sns.kdeplot(data=outData[f'Mu[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+                plt.xlabel('$\mu$ [K]')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Mu_{comp}.pdf')
         if ('idmu' == variable):
+            unit = units['energy']
             for comp in components:
                 plt.figure()
-                sns.histplot(data=outData['IdMu[K]'][term:],bins=50,discrete=False,stat='probability')
-                if kde: sns.kdeplot(data=outData['IdMu[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-                plt.xlabel('$\mu_{\\rm id}$[K]')
+                sns.histplot(data=outData[f'IdMu[{unit}]'][term:],bins=50,discrete=False,stat='density')
+                if kde: sns.kdeplot(data=outData[f'IdMu[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+                plt.xlabel('$\mu_{\\rm id}$ [K]')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_IdMu_{comp}.pdf')
         if ('exmu' == variable):
+            unit = units['energy']
             for comp in components:
                 plt.figure()
-                sns.histplot(data=outData[f'ExMu[K] {comp}'][term:],bins=50,discrete=False,stat='probability')
-                if kde: sns.kdeplot(data=outData['T[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-                plt.xlabel('$\mu_{\\rm ex}$[K]')
+                sns.histplot(data=outData[f'ExMu[{unit}] {comp}'][term:],bins=50,discrete=False,stat='density')
+                if kde: sns.kdeplot(data=outData[f'T[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+                plt.xlabel('$\mu_{\\rm ex}$ [K]')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_ExMu_{comp}.pdf')
         if ('rho' == variable):
+            unit = units['volume']
             for comp in components:
                 plt.figure()
-                sns.histplot(data=outData[f'Rho[kg/mol] {comp}'][term:],bins=50,discrete=False,stat='probability')
-                if kde: sns.kdeplot(data=outData[f'Rho[kg/mol] {comp}'][term:],bw_adjust=3,color='r',linewidth=5)
-                plt.xlabel('$\\rho$[kg/mol]')
+                sns.histplot(data=outData[f'Rho[{unit}] {comp}'][term:],bins=50,discrete=False,stat='density')
+                if kde: sns.kdeplot(data=outData[f'Rho[{unit}] {comp}'][term:],bw_adjust=3,color='r',linewidth=5)
+                plt.xlabel('$\\rho$ [kg/m$^3$]')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Rho_{comp}.pdf')
         if ('n' == variable):
@@ -773,23 +854,45 @@ class Raspa(Extract):
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_N_{comp}.pdf')
         if ('kh' == variable):
+            unit = units['henry']
             for comp in components:
                 plt.figure()
-                sns.histplot(data=outData[f'KH[mol/kg/Pa] {comp}'][term:],bins=50,discrete=False,stat='probability')
-                if kde: sns.kdeplot(data=outData[f'KH[mol/kg/Pa] {comp}'][term:],bw_adjust=3,color='r',linewidth=5)
-                plt.xlabel('$K_H$[mol/kg/Pa]')
+                sns.histplot(data=outData[f'KH[{unit}] {comp}'][term:],bins=50,discrete=False,stat='density')
+                if kde: sns.kdeplot(data=outData[f'KH[{unit}] {comp}'][term:],bw_adjust=3,color='r',linewidth=5)
+                plt.xlabel('$K_H$ [mol/kg/Pa]')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_KH_{comp}.pdf')
         if ('l' == variable):
+            unit = units['distance']
             for dim in dimensions:
                 plt.figure()
-                sns.histplot(data=outData[f'Box-L[A] {dim}'][term:],bins=50,discrete=False,stat='probability')
-                if kde: sns.kdeplot(data=outData[f'Box-L[A] {dim}'][term:],bw_adjust=3,color='r',linewidth=5)
-                plt.xlabel(f'Box-L[A] {dim}')
+                sns.histplot(data=outData[f'L_{dim}[{unit}]'][term:],bins=50,discrete=False,stat='density')
+                if kde: sns.kdeplot(data=outData[f'L_{dim}[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+                plt.xlabel(f'$L_{dim}$ [\\r{{A}}]')
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_L_{dim}.pdf')
-    def PlotVariables(self, outData, fileNumber, variable):
+        if ('a' == variable):
+            unit = units['angle']
+            for ang in angles:
+                plt.figure()
+                sns.histplot(data=outData[f'{ang}[{unit}]'][term:],bins=50,discrete=False,stat='density')
+                if kde: sns.kdeplot(data=outData[f'{ang}[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+                plt.xlabel(f'$\{ang}$ [degrees]')
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_{ang}.pdf')
+        if ('bl' == variable):
+            unit = units['distance']
+            vectors = ['a','b','c']
+            dimensions = ['x','y','z']
+            for vec in vectors:
+                for dim in dimensions:
+                    plt.figure()
+                    sns.histplot(data=outData[f'{vec}_{dim}[{unit}]'][term:],bins=50,discrete=False,stat='density')
+                    if kde: sns.kdeplot(data=outData[f'{vec}_{dim}[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+                    plt.xlabel(f'${vec}_{dim}$ [\\r{{A}}]')
+                    plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-{vec}_{dim}.pdf')
+    def PlotVariables(self, outData,fileNumber,variable):
         term = self.termalizationInPlots
         dimensions = self.dimensions
+        angles = self.angles
         components = self.components
         units = self.units
         outPath,outFileName,outExtension = self.outFilePath
@@ -800,70 +903,70 @@ class Raspa(Extract):
             unit = units['volume']
             plt.figure()
             outData[f'V[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
-            plt.ylabel(f'V[{unit}]')
+            plt.ylabel('$V$ [\\r{A}$^3$]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-V.pdf')
         if ('t' == variable):
             unit = units['temperature']
             plt.figure()
             outData[f'T[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'T[{unit}]')
+            plt.ylabel(f'T [{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-T.pdf')
         if ('p' == variable):
             unit = units['pressure']
             plt.figure()
             outData[f'P[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'P[{unit}]')
+            plt.ylabel(f'P [{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-P.pdf')
         if ('u' == variable):
             unit = units['energy']
             plt.figure()
             outData[f'$U$[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'U[{unit}]')
+            plt.ylabel(f'U [{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-U.pdf')
         if ('uhh' == variable):
             unit = units['energy']
             plt.figure()
             outData[f'Uhh[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'$U$(host-host)[{unit}]')
+            plt.ylabel(f'$U$ (host-host) [{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Uhh.pdf')
         if ('uhg' == variable):
             unit = units['energy']
             plt.figure()
             outData[f'Uhg[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'$U$(host-adsorbate)[{unit}]')
+            plt.ylabel(f'$U$ (host-adsorbate) [{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Uhg.pdf')
         if ('uhc' == variable):
             unit = units['energy']
             plt.figure()
             outData[f'Uhc[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'$U$(host-cation)[{unit}]')
+            plt.ylabel(f'$U$ (host-cation) [{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Uhc.pdf')
         if ('ugg' == variable):
             unit = units['energy']
             plt.figure()
             outData[f'Ugg[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'$U$(adsorbate-adsorbate)[{unit}]')
+            plt.ylabel(f'$U$ (adsorbate-adsorbate) [{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Ugg.pdf')
         if ('ucc' == variable):
             unit = units['energy']
             plt.figure()
             outData[f'Ucc[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'$U$(cation-cation)[{unit}]')
+            plt.ylabel(f'$U$ (cation-cation) [{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Ucc.pdf')
         if ('ugc' == variable):
             unit = units['energy']
             plt.figure()
             outData[f'Ugc[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'$U$(adsorbate-cation)[{unit}]')
+            plt.ylabel(f'$U$ (adsorbate-cation) [{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Ugc.pdf')
         if ('rho' == variable):
@@ -871,7 +974,7 @@ class Raspa(Extract):
             for comp in components:
                 plt.figure()
                 outData[f'Rho[{unit}] {comp}'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-                plt.ylabel(f'$\\rho$[{unit}] ({comp})')
+                plt.ylabel(f'$\\rho$ [kg/m$^3$] ({comp})')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Rho_{comp}.pdf')
         if ('n' == variable):
@@ -886,24 +989,43 @@ class Raspa(Extract):
             for comp in components:
                 plt.figure()
                 outData[f'KH[{unit}] {comp}'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-                plt.ylabel(f'$K_H$[{unit}]')
+                plt.ylabel(f'$K_H$ [{unit}]')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_KH_{comp}.pdf')
         if ('mu' == variable):
             unit = units['energy']
             plt.figure()
             outData[f'Mu[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'$\mu$[{unit}]')
+            plt.ylabel(f'$\mu$ [{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Mu.pdf')
         if ('l' == variable):
             unit = units['distance']
             for dim in dimensions:
                 plt.figure()
-                outData[f'L[{unit}] {dim}'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-                plt.ylabel(f'L[{unit}] {dim}')
+                outData[f'L_{dim}[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+                plt.ylabel(f'$L_{dim}$ [\\r{{A}}]')
                 plt.tight_layout()
                 plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-L_{dim}.pdf')
+        if ('a' == variable):
+            unit = units['angle']
+            for ang in angles:
+                plt.figure()
+                outData[f'{ang}[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+                plt.ylabel(f'$\{ang}$ [degrees]')
+                plt.tight_layout()
+                plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-{ang}.pdf')
+        if ('bl' == variable):
+            unit = units['distance']
+            vectors = ['a','b','c']
+            dimensions = ['x','y','z']
+            for vec in vectors:
+                for dim in dimensions:
+                    plt.figure()
+                    outData[f'{vec}_{dim}[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+                    plt.ylabel(f'${vec}_{dim}$ [\\r{{A}}]')
+                    plt.tight_layout()
+                    plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-{vec}_{dim}.pdf')
 class MCPorousMaterials(Extract):
     def __init__(self): 
         Extract.__init__(self,argv)
@@ -2167,7 +2289,7 @@ class SummarizeDataFrames():
         dataFileNames = os.listdir(dataFilesPath)
         groupedDataFrames = {i:[] for i in groups}
         for dataFile in dataFileNames:
-            dataFrame = pd.read_csv(dataFilesPath+dataFile,sep='\t')
+            dataFrame = pd.read_csv(dataFilesPath+dataFile,sep='\t',encoding='unicode_escape')
             dfFirstRow = dataFrame[:1]
             dataFrame = pd.concat([dfFirstRow,dataFrame[countFrom:]])
             for i in groups:
@@ -2298,6 +2420,7 @@ def Help():
     print('\t\t\tIf you have several files in the input path given, this script will extract them all and enumerate them as i_fileName, where i is an integer number.')
     print('\t\t\tBy default (if you don\'t set output path), no file is created.')
     print('\t\t-d or -D: List of dimensions to extract the box-lengths. By deafault, the three dimensions.')
+    print('\t\t-a or -A: List of angles to extract the box-angles. By deafault, the three angles.')
     print('\t\t-v or -V: Indicate the list of variables that will be extracted. By default: N.')
     print('\t\t-g or -G: Indicate the list of variables that will be extracted to plot their respective histograms. By default: N.')
     print('\t\t-eh or -EH: Indicate termalization for histograms (initial point to analyze the data).')
