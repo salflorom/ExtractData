@@ -88,55 +88,56 @@ class Extract():
         for i in range(len(argv)):
             argv[i] = argv[i].lower()
             if (argv[i] == '-h'): self.Help()
-            elif (argv[i] == '-p'): printInputParams = True
+            if (argv[i] == '-help'): self.Help()
+            elif (argv[i] == '-print'): printInputParams = True
             elif (argv[i] == '-kde'): kernelDensity = True
-            elif (argv[i] == '-i'): path = argv[i+1]
-            elif (argv[i] == '-u'): units = argv[i+1]
-            elif (argv[i] == '-s'): sort = argv[i+1]
-            elif (argv[i] == '-o'): outFile = (argv[i+1],True)
-            elif (argv[i] == '-ef'): termalizationInPlots = int(float(argv[i+1]))
-            elif (argv[i] == '-eh'): termalizationInHists = int(float(argv[i+1]))
+            elif (argv[i] == '-in'): path = argv[i+1]
+            elif (argv[i] == '-units'): units = argv[i+1]
+            elif (argv[i] == '-sort'): sort = argv[i+1]
+            elif (argv[i] == '-out'): outFile = (argv[i+1],True)
+            elif (argv[i] == '-thermafigures'): termalizationInPlots = int(float(argv[i+1]))
+            elif (argv[i] == '-thermahists'): termalizationInHists = int(float(argv[i+1]))
             elif (argv[i] == '-append'): append = True
-            elif (argv[i] == '-d'):
+            elif (argv[i] == '-dimensions'):
                 dimensions = []
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
                     dimensions.append(argv[j])
-            elif (argv[i] == '-a'):
+            elif (argv[i] == '-angles'):
                 angles = []
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
                     angles.append(argv[j])
-            elif (argv[i] == '-bv'):
+            elif (argv[i] == '-boxvectors'):
                 boxVectors = []
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
                     boxVectors.append(argv[j])
-            elif (argv[i] == '-c'):
+            elif (argv[i] == '-components'):
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
                     components.append(argv[j])
-            elif (argv[i] == '-v'):
+            elif (argv[i] == '-variables'):
                 varsToExtract = []
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
                     varsToExtract.append(argv[j].lower())
-            elif (argv[i] == '-b'):
+            elif (argv[i] == '-boxes'):
                 boxes = []
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
                     boxes.append(int(argv[j]))
-            elif (argv[i] == '-t'):
+            elif (argv[i] == '-sections'):
                 sections = []
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
                     sections.append(argv[j])
-            elif (argv[i] == '-g'):
+            elif (argv[i] == '-hists'):
                 histsToExtract = []
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
                     histsToExtract.append(argv[j].lower())
-            elif (argv[i] == '-f'):
+            elif (argv[i] == '-figures'):
                 figuresToExtract = []
                 for j in range(i+1,len(argv)):
                     if (argv[j][0] == '-'): break
@@ -1026,7 +1027,7 @@ class Raspa(Extract):
                     plt.ylabel(f'${vec}_{dim}$ [\\r{{A}}]')
                     plt.tight_layout()
                     plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-{vec}_{dim}.pdf')
-class MCPorousMaterials(Extract):
+class MezCal(Extract):
     def __init__(self): 
         Extract.__init__(self,argv)
         self.listLogFiles = []
@@ -1057,11 +1058,11 @@ class MCPorousMaterials(Extract):
         unitStyle = 'generic'
         units['mass'] = 'g/mol'
         units['distance'] = 'A'
-        units['volume'] = 'A$^3$'
+        units['volume'] = 'A^3'
         units['energy'] = 'K'
         units['temperature'] = 'K'
         units['pressure'] = 'Pa'
-        units['density'] = 'g/cm$^3$'
+        units['density'] = 'g/cm^3'
         self.units = units
         self.unitStyle = unitStyle
     def PrintInputParameters(self):
@@ -1098,6 +1099,7 @@ class MCPorousMaterials(Extract):
     def ExtractData(self):
         listLogFiles = self.listLogFiles
         varsToExtract = self.varsToExtract
+        figuresToExtract = self.figuresToExtract
         histsToExtract = self.histsToExtract
         createFigures = self.createFigures
         outFileName, createOutFile = self.outFile
@@ -1118,16 +1120,16 @@ class MCPorousMaterials(Extract):
                         else: 
                             print(f'\nCreating output file: dataFiles/{i}_{comp}_{outFileName}{outExtension} ...')
                         self.CreateOutFile(outData,i)
-                        if createFigures: 
+                        if figuresToExtract: 
                             print('\nCreating figures...')
-                            for j in varsToExtract: 
+                            for j in figuresToExtract: 
                                 self.PlotVariables(outData,i,j,comp)
                                 print(f'\t{outPath}Figures/{i}_{outFileName}_{j.upper()}_{comp} ...')
                     else:
-                        if createFigures: 
+                        if figuresToExtract: 
                             _ = self.ReadOutputFile()
                             print('\nCreating figures...')
-                            for j in varsToExtract: 
+                            for j in figuresToExtract: 
                                 self.PlotVariables(outData,i,j,comp)
                                 print(f'\tFigures/{i}_{outFileName}_{j.upper()}_{comp} ...')
                     if histsToExtract:
@@ -1183,12 +1185,12 @@ class MCPorousMaterials(Extract):
         if ('l' in varsToExtract):
             unit = units['distance']
             dim = 'x'
-            outData[f'L[{unit}] {dim}'] = dataFrame[f'width[AA]']
+            outData[f'L_{dim}[{unit}]'] = dataFrame[f'width[AA]']
         return outData
     def ExtractPressures(self,fileName):
         units = self.units['pressure']
         pressures = []
-        print('Warning: MC-PorousMaterials does not print pressures. Attempting to extract fixed external pressure from path.')
+        print('Warning: MezCal does not print pressures. Attempting to extract fixed external pressure from path.')
         pressure = re.search(f'.+_(\d+\.\d*)pa/',fileName)
         pressures.append(float(pressure.group(1)))
         return pd.Series(pressures,index=range(len(pressures)))
@@ -1204,35 +1206,35 @@ class MCPorousMaterials(Extract):
             unit = units['volume']
             plt.figure()
             outData[f'V[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets or cycles)')
-            plt.ylabel(f'V[{unit}]')
+            plt.ylabel(f'V [\\r{A}$^3$]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-V.pdf')
         if ('t' == variable):
             unit = units['temperature']
             plt.figure()
             outData[f'T[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'T[{unit}]')
+            plt.ylabel(f'T [{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-T.pdf')
         if ('p' == variable):
             unit = units['pressure']
             plt.figure()
             outData[f'P[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'P[{unit}]')
+            plt.ylabel(f'P [{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-P.pdf')
         if ('u' == variable):
             unit = units['energy']
             plt.figure()
             outData[f'U[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'U[{unit}]')
+            plt.ylabel(f'U [{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-U.pdf')
         if ('rho' == variable):
             unit = units['density']
             plt.figure()
             outData[f'Rho[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'$\\rho$[{unit}] ({comp})')
+            plt.ylabel(f'$\\rho$ [g/cm$^3$] ({comp})')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Rho_{comp}.pdf')
         if ('n' == variable):
@@ -1245,15 +1247,15 @@ class MCPorousMaterials(Extract):
             unit = units['energy']
             plt.figure()
             outData[f'Mu[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'$\mu$[{unit}]')
+            plt.ylabel(f'$\mu$ [{unit}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Mu.pdf')
         if ('l' == variable):
             unit = units['distance']
             dim = 'x'
             plt.figure()
-            outData[f'L[{unit}] {dim}'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'L[{unit}] {dim}')
+            outData[f'L_{dim}[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
+            plt.ylabel(f'L_{dim} [\\r{{A}}]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-L_{dim}.pdf')
     def PlotHistograms(self,outData,fileNumber,variable, comp):
@@ -2326,6 +2328,7 @@ class SummarizeDataFrames():
             moe, moeSqr, moeVar = np.zeros(nDataFrames), np.zeros(nDataFrames), np.zeros(nDataFrames)
             for variable in group[0].columns:
                 for j in range(nDataFrames):
+                    group[j][variable].replace(-np.inf, np.nan, inplace=True)
                     sampleSizes[j] = len(group[j][variable])
                     averages[j] = group[j][variable].mean()
                     variances[j] = group[j][variable].std()
@@ -2479,14 +2482,14 @@ if __name__ == '__main__':
     print('Author: Santiago A. Flores Roman')
     argvString = ' '.join(argv)
     print(f'\nCommand line being executed:\n{argvString}')
-    if re.search(r'-h+',argvString.lower()): Help()
+    # if re.search(r'-h+',argvString.lower()): Help()
     print('\nChecking simulation program...')
     extract = 0
-    checkMotor = re.search(r'-m\s+([\w-]+)\s+',argvString.lower())
+    checkMotor = re.search(r'-program\s+([\w-]+)\s+',argvString.lower())
     if checkMotor:
         motor = checkMotor.group(1)
         if motor == 'raspa': print('RASPA'); extract = Raspa()
-        elif motor == 'mc-porousmaterials': print('MC-PorousMaterials'); extract = MCPorousMaterials()
+        elif motor == 'mezcal': print('MezCal'); extract = MezCal()
         elif motor == 'chainbuild': print('Chainbuild'); extract = Chainbuild()
         elif motor == 'gomc': print('GOMC'); extract = GOMC()
         elif motor == 'lammps': print('LAMMPS'); extract = LAMMPS()
